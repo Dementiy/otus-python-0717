@@ -26,6 +26,9 @@
 # Можно свободно определять свои функции и т.п.
 # -----------------
 
+import itertools
+from collections import Counter
+
 
 def hand_rank(hand):
     """Возвращает значение определяющее ранг 'руки'"""
@@ -52,40 +55,64 @@ def hand_rank(hand):
 
 def card_ranks(hand):
     """Возвращает список рангов, отсортированный от большего к меньшему"""
-    return
+    return sorted(["23456789TJQKA".index(rank) for rank,suit in hand], reverse=True)
 
 
 def flush(hand):
     """Возвращает True, если все карты одной масти"""
-    return
+    return len(set([suit for rank,suit in hand])) == 1
 
 
 def straight(ranks):
     """Возвращает True, если отсортированные ранги формируют последовательность 5ти,
     где у 5ти карт ранги идут по порядку (стрит)"""
-    return
+    return set(itertools.imap(lambda a,b: a-b, ranks, ranks[1:])) == {1}
 
 
 def kind(n, ranks):
     """Возвращает первый ранг, который n раз встречается в данной руке.
     Возвращает None, если ничего не найдено"""
-    return
+    for rank, group in itertools.groupby(ranks):
+        if len(list(group)) == n:
+            return rank
+    return None
 
 
 def two_pair(ranks):
     """Если есть две пары, то возврщает два соответствующих ранга,
     иначе возвращает None"""
-    return
+    pairs = [rank for rank,freq in Counter(ranks).items() if freq==2]
+    return sorted(pairs, reverse=True) if len(pairs)==2 else None
 
 
 def best_hand(hand):
     """Из "руки" в 7 карт возвращает лучшую "руку" в 5 карт """
-    return
+    hands5 = list(itertools.combinations(hand, 5))
+    ranks5 = [hand_rank(hand5) for hand5 in hands5]
+    return max(zip(ranks5, hands5), key=lambda (r,h): r)[1]
 
 
 def best_wild_hand(hand):
     """best_hand но с джокерами"""
-    return
+
+    def joker2cards(joker, suits):
+        cards = []
+        if joker in hand:
+            hand.remove(joker)
+            cards = ["%s%s" % (rank,suit) for rank,suit in itertools.product("23456789TJQKA", suits)]
+            cards = [card for card in cards if card not in hand]
+        return cards
+
+    cardsCS = joker2cards("?B", "CS")
+    cardsHD = joker2cards("?R", "HD")
+    if all([cardsCS, cardsHD]):
+        cards = list(itertools.product(cardsCS, cardsHD))
+        hands = [hand + list(card) for card in cards]
+    elif any([cardsCS, cardsHD]):
+        hands = [hand + [card] for card in cardsCS + cardsHD]
+    else:
+        hands = [hand]
+    return max(set([best_hand(h) for h in hands]), key=hand_rank)
 
 
 def test_best_hand():
@@ -96,7 +123,6 @@ def test_best_hand():
             == ['8C', '8S', 'TC', 'TD', 'TH'])
     assert (sorted(best_hand("JD TC TH 7C 7D 7S 7H".split()))
             == ['7C', '7D', '7H', '7S', 'JD'])
-    return 'test_best_hand passes'
     print 'OK'
 
 
