@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 
 from functools import update_wrapper
+from functools import wraps
 
 
-def disable():
+def disable(f):
     '''
     Disable a decorator by re-assigning the decorator's name
     to this function. For example, to turn off memoization:
@@ -12,39 +13,55 @@ def disable():
     >>> memo = disable
 
     '''
-    return
+    return f if callable(f) else lambda f: f
 
 
-def decorator():
+def decorator(deco):
     '''
     Decorate a decorator so that it inherits the docstrings
     and stuff from the function it's decorating.
     '''
-    return
+    def wrapper(f):
+        return update_wrapper(deco(f), f)
+    return update_wrapper(wrapper, deco)
 
 
-def countcalls():
+def countcalls(f):
     '''Decorator that counts calls made to the function decorated.'''
-    return
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        wrapper.calls += 1
+        return f(*args, **kwargs)
+    wrapper.calls = 0
+    return wrapper
 
 
-def memo():
+def memo(f):
     '''
     Memoize a function so that it caches all return values for
     faster future lookups.
     '''
-    return
+    cache = {}
+    @wraps(f)
+    def wrapper(*args):
+        if args not in cache:
+            cache[args] = f(*args)
+        return cache[args]
+    return wrapper
 
 
-def n_ary():
+def n_ary(f):
     '''
     Given binary function f(x, y), return an n_ary function such
     that f(x, y, z) = f(x, f(y,z)), etc. Also allow f(x) = x.
     '''
-    return
+    @wraps(f)
+    def wrapper(x, *args):
+        return x if not args else f(x, wrapper(*args))
+    return wrapper
 
 
-def trace():
+def trace(fill_value):
     '''Trace calls made to function decorated.
 
     @trace("____")
@@ -64,7 +81,20 @@ def trace():
      <-- fib(3) == 3
 
     '''
-    return
+    def trace_decorator(f):
+        @wraps(f)
+        def wrapper(*args):
+            prefix = fill_value * wrapper.level
+            fargs = ", ".join(str(a) for a in args)
+            print "{} --> {}({})".format(prefix, f.__name__, fargs)
+            wrapper.level += 1
+            result = f(*args)
+            print "{} <-- {}({}) == {}".format(prefix, f.__name__, fargs, result)
+            wrapper.level -= 1
+            return result
+        wrapper.level = 0
+        return wrapper
+    return trace_decorator
 
 
 @memo
