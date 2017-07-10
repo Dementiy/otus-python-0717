@@ -94,24 +94,16 @@ def best_hand(hand):
 
 def best_wild_hand(hand):
     """best_hand но с джокерами"""
-
-    def joker2cards(joker, suits):
-        cards = []
-        if joker in hand:
-            hand.remove(joker)
-            cards = ["%s%s" % (rank,suit) for rank,suit in itertools.product("23456789TJQKA", suits)]
-            cards = [card for card in cards if card not in hand]
-        return cards
-
-    cardsCS = joker2cards("?B", "CS")
-    cardsHD = joker2cards("?R", "HD")
-    if all([cardsCS, cardsHD]):
-        cards = list(itertools.product(cardsCS, cardsHD))
-        hands = [hand + list(card) for card in cards]
-    elif any([cardsCS, cardsHD]):
-        hands = [hand + [card] for card in cardsCS + cardsHD]
-    else:
-        hands = [hand]
+    clear_hand = [card for card in hand if card not in ["?B", "?R"]]
+    hands = [clear_hand]
+    if "?B" in hand:
+        cards = ["%s%s"%(r,s) for r,s in itertools.product("23456789TJQKA", "CS")]
+        cards = [card for card in cards if card not in clear_hand]
+        hands = [h + [card] for h in hands for card in cards]
+    if "?R" in hand:
+        cards = ["%s%s"%(r,s) for r,s in itertools.product("23456789TJQKA", "HD")]
+        cards = [card for card in cards if card not in clear_hand]
+        hands = [h + [card] for h in hands for card in cards]
     return max(set([best_hand(h) for h in hands]), key=hand_rank)
 
 
