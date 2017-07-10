@@ -46,6 +46,7 @@ def memo(f):
     def wrapper(*args):
         if args not in cache:
             cache[args] = f(*args)
+        update_wrapper(wrapper, f)
         return cache[args]
     return wrapper
 
