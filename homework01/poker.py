@@ -87,9 +87,9 @@ def two_pair(ranks):
 
 def best_hand(hand):
     """Из "руки" в 7 карт возвращает лучшую "руку" в 5 карт """
-    hands5 = list(itertools.combinations(hand, 5))
-    ranks5 = [hand_rank(hand5) for hand5 in hands5]
-    return max(zip(ranks5, hands5), key=lambda (r,h): r)[1]
+    hands5 = itertools.combinations(hand, 5)
+    ranks5 = ((hand_rank(hand5), hand5) for hand5 in hands5)
+    return max(ranks5, key=lambda (r,h): r)[1]
 
 
 def best_wild_hand(hand):
