@@ -9,6 +9,7 @@
 
 import gzip
 import collections
+import functools
 import re
 import json
 import os
@@ -32,12 +33,27 @@ def xreadlines(log_path):
     log.close()
 
 
-def consumer(f):
-    def start(*args, **kwargs):
-        c = f(*args, **kwargs)
-        c.next()
-        return c
-    return start
+def field_map(dictseq, name, func):
+    for d in dictseq:
+        try:
+            d[name] = func(d[name])
+            yield d
+        except:
+            pass
+
+
+def save2html(stat, template, report_path):
+    with open(template) as f:
+        text = f.read()
+    text = text.replace('$table_json', json.dumps(stat))
+
+    with open(report_path, "w") as f:
+        f.write(text)
+
+
+def save2json(stat, json_path):
+    with open(json_path, "w") as f:
+        f.write(json.dumps(stat))
 
 
 def median(nums):
@@ -51,79 +67,29 @@ def median(nums):
         return sum(nums[n//2-1:n//2+1])/2.0
 
 
-@consumer
-def count_stat(target):
-    stat = collections.defaultdict(list)
-    while True:
-        r = (yield)
-        if r is None:
-            break
-        stat[r['request']].append(r['request_time'])
-
-    total_count = sum(len(c) for c in stat.values())
-    total_time = sum(sum(t) for t in stat.values())
-    for url, times in stat.iteritems():
-        target.send({
+def process_log(log):
+    url2times = collections.defaultdict(list)
+    for logline in log:
+        url2times[logline['request']].append(logline['request_time'])
+    
+    total_count = total_time = 0
+    for v in url2times.itervalues():
+        total_count += len(v)
+        total_time += sum(v)
+    
+    stat = []
+    for url, times_list in url2times.iteritems():
+        stat.append({
             'url': url,
-            'count': len(times),
-            'count_perc': round(100 * len(times) / float(total_count), 3),
-            'time_avg': round(sum(times) / len(times), 3),
-            'time_med': round(median(times), 3),
-            'time_max': round(max(times), 3),
-            'time_sum': round(sum(times), 3),
-            'time_perc': round(100 * sum(times) / total_time, 3)
+            'count': len(times_list),
+            'count_perc': round(100 * len(times_list) / float(total_count), 3),
+            'time_avg': round(sum(times_list) / len(times_list), 3),
+            'time_med': round(median(times_list), 3),
+            'time_max': round(max(times_list), 3),
+            'time_sum': round(sum(times_list), 3),
+            'time_perc': round(100 * sum(times_list) / total_time, 3)
         })
-    target.send(None)
-
-
-def broadcast(source, consumers):
-    for item in source:
-        for c in consumers:
-            c.send(item)
-    for c in consumers:
-        try:
-            c.send(None)
-        except StopIteration:
-            pass
-
-
-def field_map(dictseq, name, func):
-    for d in dictseq:
-        try:
-            d[name] = func(d[name])
-            yield d
-        except:
-            pass
-
-
-@consumer
-def to_report(template, report_path):
-    stat = []
-    while True:
-        line = (yield)
-        if line is None:
-            break
-        stat.append(line)
-
-    with open(template) as f:
-        text = f.read()
-    text = text.replace('$table_json', json.dumps(stat))
-
-    with open(report_path, "w") as f:
-        f.write(text)
-
-
-@consumer
-def to_json(json_path):
-    stat = []
-    while True:
-        line = (yield)
-        if line is None:
-            break
-        stat.append(line)
-
-    with open(json_path, "w") as f:
-        f.write(json.dumps(stat))
+    return stat
 
 
 def log_parser(log_path):
@@ -149,6 +115,14 @@ def log_parser(log_path):
     return log
 
 
+def report_exists(log_date):
+    reports = os.listdir(config["REPORT_DIR"])
+    for report in reports:
+        if report[-15:-5] == log_date:
+            return True
+    return False
+
+
 def main():
     """
     Папки из конфига уже должны быть созданы.
@@ -157,33 +131,27 @@ def main():
     Варианты запуска:
     $ ./log_analyzer.py
     $ ./log_analyzer.py --log_path path/to/log
-    $ ./log_analyzer.py --json
-    $ ./log_analyzer.py --log_path path/to/log --json
+    $ ./log_analyzer.py -o json
+    $ ./log_analyzer.py --log_path path/to/log -o json
     """
     parser = argparse.ArgumentParser(description="Process log files.")
     parser.add_argument('--log_path', dest='log_path', help='Path to log file')
-    parser.add_argument('--json', action='store_true', default=False, help="Save data to JSON")
+    parser.add_argument('-o', dest='format', default='html', help="Save data to specified format")
     args = parser.parse_args()
 
-    # Находим последний лог-файл
+    # Находим последний лог-файл по дате в имени файла
     if args.log_path:
         log_path = args.log_path
     else:
         logs = [os.path.join(config["LOG_DIR"], logfile) for logfile in os.listdir(config['LOG_DIR'])]
-        log_path = max(logs, key=os.path.getctime)
+        log_path = max(logs, key=lambda logfile: re.findall('(\d{8})', logfile)[0])
 
     # Проверяем существует ли отчет для лога (по дате в имени)
-    date_pat = re.compile("([0-9]{4}\.*[0-9]{2}\.*[0-9]{2})")
-    log_date = date_pat.search(log_path).group()
+    log_date = re.findall('(\d{8})', log_path)[0]
     log_date = log_date[:4] + "." + log_date[4:6] + "." + log_date[6:]
-    reports = [report for report in os.listdir(config["REPORT_DIR"]) if report.endswith('.html')]
-    for report in reports:
-        try:
-            if log_date == date_pat.search(report).group():
-                print "Report already exists: ", report
-                return
-        except AttributeError:
-            pass
+    if report_exists(log_date):
+        print "Report already exists"
+        return
 
     log = log_parser(log_path)
     template_path = os.path.join(config["REPORT_DIR"], "report.html")
@@ -191,8 +159,13 @@ def main():
     json_path = os.path.join(config["REPORT_DIR"], "report-%s.json" % log_date)
 
     # Выбираем как сохранять обработанные результаты
-    printer = [to_report(template_path, report_path), to_json(json_path)][args.json]
-    broadcast(log, [count_stat(printer)])
+    save = {
+        'html': functools.partial(save2html, template=template_path, report_path=report_path),
+        'json': functools.partial(save2json, json_path=json_path)
+    }.get(args.format, 'html')
+
+    stat = process_log(log)
+    save(stat)
 
 if __name__ == "__main__":
     main()
