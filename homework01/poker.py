@@ -81,8 +81,8 @@ def kind(n, ranks):
 def two_pair(ranks):
     """Если есть две пары, то возврщает два соответствующих ранга,
     иначе возвращает None"""
-    pairs = [rank for rank,freq in Counter(ranks).items() if freq==2]
-    return sorted(pairs, reverse=True) if len(pairs)==2 else None
+    r1, r2 = kind(2, ranks), kind(2, ranks[::-1])
+    return (r1, r2) if r1 and (r1 != r2) else None
 
 
 def best_hand(hand):
