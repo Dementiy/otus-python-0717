@@ -88,20 +88,17 @@ def two_pair(ranks):
 def best_hand(hand):
     """Из "руки" в 7 карт возвращает лучшую "руку" в 5 карт """
     hands5 = itertools.combinations(hand, 5)
-    ranks5 = ((hand_rank(hand5), hand5) for hand5 in hands5)
-    return max(ranks5, key=lambda (r,h): r)[1]
+    return max(hands5, key=hand_rank)
 
 
 def best_wild_hand(hand):
     """best_hand но с джокерами"""
-    clear_hand = [card for card in hand if card not in ["?B", "?R"]]
+    jokers = {"?B": "CS", "?R": "HD"}
+    clear_hand = [card for card in hand if card not in jokers]
+    joker_suits = [jokers[card] for card in hand if card in jokers]
     hands = [clear_hand]
-    if "?B" in hand:
-        cards = ["%s%s"%(r,s) for r,s in itertools.product("23456789TJQKA", "CS")]
-        cards = [card for card in cards if card not in clear_hand]
-        hands = [h + [card] for h in hands for card in cards]
-    if "?R" in hand:
-        cards = ["%s%s"%(r,s) for r,s in itertools.product("23456789TJQKA", "HD")]
+    for joker_suit in joker_suits:
+        cards = ["%s%s"%(r,s) for r,s in itertools.product("23456789TJQKA", joker_suit)]
         cards = [card for card in cards if card not in clear_hand]
         hands = [h + [card] for h in hands for card in cards]
     return max(set([best_hand(h) for h in hands]), key=hand_rank)
