@@ -71,12 +71,12 @@ def process_log(log):
     url2times = collections.defaultdict(list)
     for logline in log:
         url2times[logline['request']].append(logline['request_time'])
-    
+
     total_count = total_time = 0
     for v in url2times.itervalues():
         total_count += len(v)
         total_time += sum(v)
-    
+
     stat = []
     for url, times_list in url2times.iteritems():
         stat.append({
@@ -115,15 +115,7 @@ def log_parser(log_path):
     return log
 
 
-def report_exists(log_date):
-    reports = os.listdir(config["REPORT_DIR"])
-    for report in reports:
-        if report[-15:-5] == log_date:
-            return True
-    return False
-
-
-def main():
+def main(log_path, fmt):
     """
     Папки из конфига уже должны быть созданы.
     Подразумевается, что формат логов такой logname-DATE[.gz]
@@ -131,41 +123,48 @@ def main():
     Варианты запуска:
     $ ./log_analyzer.py
     $ ./log_analyzer.py --log_path path/to/log
-    $ ./log_analyzer.py -o json
-    $ ./log_analyzer.py --log_path path/to/log -o json
+    $ ./log_analyzer.py -f json
+    $ ./log_analyzer.py --log_path path/to/log --format json
     """
-    parser = argparse.ArgumentParser(description="Process log files.")
-    parser.add_argument('--log_path', dest='log_path', help='Path to log file')
-    parser.add_argument('-o', dest='format', default='html', help="Save data to specified format")
-    args = parser.parse_args()
 
     # Находим последний лог-файл по дате в имени файла
-    if args.log_path:
-        log_path = args.log_path
-    else:
+    if not log_path:
         logs = [os.path.join(config["LOG_DIR"], logfile) for logfile in os.listdir(config['LOG_DIR'])]
         log_path = max(logs, key=lambda logfile: re.findall('(\d{8})', logfile)[0])
 
-    # Проверяем существует ли отчет для лога (по дате в имени)
+    # Извлекаем дату из имени файла
     log_date = re.findall('(\d{8})', log_path)[0]
     log_date = log_date[:4] + "." + log_date[4:6] + "." + log_date[6:]
-    if report_exists(log_date):
-        print "Report already exists"
+
+    # Проверяем существует ли уже отчет в соответствующем формате
+    output_path = os.path.join(config["REPORT_DIR"], "report-%s.%s" % (log_date, fmt))
+    if os.path.exists(output_path):
+        print "Report already exists", output_path
         return
 
     log = log_parser(log_path)
-    template_path = os.path.join(config["REPORT_DIR"], "report.html")
-    report_path = os.path.join(config["REPORT_DIR"], "report-%s.html" % log_date)
-    json_path = os.path.join(config["REPORT_DIR"], "report-%s.json" % log_date)
-
-    # Выбираем как сохранять обработанные результаты
-    save = {
-        'html': functools.partial(save2html, template=template_path, report_path=report_path),
-        'json': functools.partial(save2json, json_path=json_path)
-    }.get(args.format, 'html')
-
     stat = process_log(log)
-    save(stat)
+
+    if fmt == "json":
+        save2json(stat, output_path)
+    else:
+        tmpl_path = os.path.join(config["REPORT_DIR"], "report.html")
+        save2html(stat, tmpl_path, output_path)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser("Process log files")
+    parser.add_argument("--log_path",
+        dest="log_path",
+        default=None,
+        help="Path to the log file")
+    parser.add_argument("-f", "--format",
+        dest="fmt",
+        default="html",
+        help="Output format")
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args.log_path, args.fmt)
