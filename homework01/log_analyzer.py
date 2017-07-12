@@ -14,6 +14,7 @@ import re
 import json
 import os
 import argparse
+import math
 
 
 config = {
@@ -56,15 +57,17 @@ def save2json(stat, json_path):
         f.write(json.dumps(stat))
 
 
-def median(nums):
-    nums = sorted(nums)
-    n = len(nums)
-    if n < 1:
+def percentile(nums, p):
+    if not nums:
         return None
-    if n % 2 == 1:
-        return nums[n//2]
-    else:
-        return sum(nums[n//2-1:n//2+1])/2.0
+    k = (len(nums) - 1) * p
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return nums[int(k)]
+    d0 = nums[int(f)] * (c - k)
+    d1 = nums[int(c)] * (k - f)
+    return d0 + d1
 
 
 def process_log(log):
@@ -79,15 +82,18 @@ def process_log(log):
 
     stat = []
     for url, times_list in url2times.iteritems():
+        times_list.sort()
         stat.append({
             'url': url,
             'count': len(times_list),
             'count_perc': round(100 * len(times_list) / float(total_count), 3),
             'time_avg': round(sum(times_list) / len(times_list), 3),
-            'time_med': round(median(times_list), 3),
             'time_max': round(max(times_list), 3),
             'time_sum': round(sum(times_list), 3),
-            'time_perc': round(100 * sum(times_list) / total_time, 3)
+            'time_perc': round(100 * sum(times_list) / total_time, 3),
+            'time_p50': round(percentile(times_list, 0.5), 3),
+            'time_p95': round(percentile(times_list, 0.95), 3),
+            'time_p99': round(percentile(times_list, 0.99), 3),
         })
     return stat
 
