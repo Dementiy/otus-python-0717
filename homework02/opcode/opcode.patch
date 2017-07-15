@@ -1,0 +1,84 @@
+diff --git a/Include/opcode.h b/Include/opcode.h
+index 9ed5487..4e5a148 100644
+--- a/Include/opcode.h
++++ b/Include/opcode.h
+@@ -159,6 +159,8 @@ extern "C" {
+ #define SET_ADD         146
+ #define MAP_ADD         147
+ 
++#define LOAD_FAST_CONST 148
++
+ 
+ enum cmp_op {PyCmp_LT=Py_LT, PyCmp_LE=Py_LE, PyCmp_EQ=Py_EQ, PyCmp_NE=Py_NE, PyCmp_GT=Py_GT, PyCmp_GE=Py_GE,
+ 	     PyCmp_IN, PyCmp_NOT_IN, PyCmp_IS, PyCmp_IS_NOT, PyCmp_EXC_MATCH, PyCmp_BAD};
+diff --git a/Lib/opcode.py b/Lib/opcode.py
+index e403365..88f586d 100644
+--- a/Lib/opcode.py
++++ b/Lib/opcode.py
+@@ -189,4 +189,6 @@ EXTENDED_ARG = 145
+ def_op('SET_ADD', 146)
+ def_op('MAP_ADD', 147)
+ 
++def_op('LOAD_FAST_CONST', 148)
++
+ del def_op, name_op, jrel_op, jabs_op
+diff --git a/Python/ceval.c b/Python/ceval.c
+index 4e4adc2..34e8b25 100644
+--- a/Python/ceval.c
++++ b/Python/ceval.c
+@@ -1210,6 +1210,23 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
+             FAST_DISPATCH();
+         }
+ 
++       TARGET(LOAD_FAST_CONST)
++       {
++           x = GETLOCAL(0);
++           if (x != NULL) {
++               Py_INCREF(x);
++               PUSH(x);
++               x = GETITEM(consts, oparg);
++               Py_INCREF(x);
++               PUSH(x);
++               FAST_DISPATCH();
++           }
++           format_exc_check_arg(PyExc_UnboundLocalError,
++               UNBOUNDLOCAL_ERROR_MSG,
++               PyTuple_GetItem(co->co_varnames, oparg));
++           break;
++        }
++
+         TARGET(LOAD_FAST)
+         {
+             x = GETLOCAL(oparg);
+diff --git a/Python/opcode_targets.h b/Python/opcode_targets.h
+index 95eb127..e17a4fd 100644
+--- a/Python/opcode_targets.h
++++ b/Python/opcode_targets.h
+@@ -147,7 +147,7 @@ static void *opcode_targets[256] = {
+     &&TARGET_EXTENDED_ARG,
+     &&TARGET_SET_ADD,
+     &&TARGET_MAP_ADD,
+-    &&_unknown_opcode,
++    &&TARGET_LOAD_FAST_CONST,
+     &&_unknown_opcode,
+     &&_unknown_opcode,
+     &&_unknown_opcode,
+diff --git a/Python/peephole.c b/Python/peephole.c
+index 11f6f88..4498584 100644
+--- a/Python/peephole.c
++++ b/Python/peephole.c
+@@ -424,6 +424,14 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
+                 memset(codestr+i, NOP, 6);
+                 cumlc = 0;
+                 break;
++            case LOAD_FAST:
++                j = GETARG(codestr, i);
++                if (codestr[i+3] == LOAD_CONST && j == 0)
++                {
++                    codestr[i+3] = LOAD_FAST_CONST;
++                    memset(codestr+i, NOP, 3);
++                }
++                break;
+ 
+                 /* Try to fold tuples of constants (includes a case for lists
+                    which are only used for "in" and "not in" tests).
