@@ -79,7 +79,9 @@ import logging
 import hashlib
 import uuid
 from optparse import OptionParser
+from six import string_types
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+
 
 SALT = "Otus"
 ADMIN_LOGIN = "admin"
@@ -107,58 +109,165 @@ GENDERS = {
 }
 
 
-class CharField(object):
+class ValidationError(Exception):
+    """ An error while validating data """
     pass
 
 
-class ArgumentsField(object):
+class Field(object):
+    empty_values = (None, (), [], {}, '')
+
+    def __init__(self, required=False, nullable=False):
+        self.required = required
+        self.nullable = nullable
+
+    def validate(self, value):
+        if value in self.empty_values and not self.nullable:
+            raise ValidationError("This field can't be blank")
+
+    def __get__(self, obj, type=None):
+        return obj.__dict__.get(self._name)
+
+    def __set__(self, obj, value):
+        obj.__dict__[self._name] = value
+
+
+class CharField(Field):
+    def validate(self, value):
+        super(CharField, self).validate(value)
+        if not isinstance(value, string_types):
+            raise ValidationError("This field must be a string")
+
+
+class ArgumentsField(Field):
     pass
 
 
 class EmailField(CharField):
-    pass
+    def validate(self, value):
+        super(EmailField, self).validate(value)
+        if "@" not in value:
+            raise ValidationError("Invalid email address")
 
 
-class PhoneField(object):
-    pass
+class PhoneField(Field):
+    def validate(self, value):
+        super(PhoneField, self).validate(value)
+        if not isinstance(value, string_types) and not isinstance(value, int):
+            raise ValidationError("Phone number must be numeric or string value")
+        if not str(value).startswith("7"):
+            raise ValidationError("Incorrect phone number format, should be 7XXXXXXXXX")
 
 
-class DateField(object):
-    pass
+class DateField(Field):
+    def validate(self, value):
+        super(DateField, self).validate(value)
+        try:
+            datetime.datetime.strptime(value, '%d.%m.%Y')
+        except ValueError:
+            raise ValidationError("Incorrect data format, should be DD.MM.YYYY")
 
 
-class BirthDayField(object):
-    pass
+class BirthDayField(Field):
+    def validate(self, value):
+        super(BirthDayField, self).validate(value)
+        try:
+            bdate = datetime.datetime.strptime(value, '%d.%m.%Y')
+        except ValueError:
+            raise ValidationError("Incorrect data format, should be DD.MM.YYYY")
+        if datetime.datetime.now().year - bdate.year > 70:
+            raise ValidationError("Incorrect birth day")
 
 
-class GenderField(object):
-    pass
+class GenderField(Field):
+    def validate(self, value):
+        super(GenderField, self).validate(value)
+        if value not in GENDERS:
+            raise ValidationError("Gender must be equal to 0,1 or 2")
 
 
-class ClientIDsField(object):
-    pass
+class ClientIDsField(Field):
+    def validate(self, value):
+        super(ClientIDsField, self).validate(value)
+        if not isinstance(value, list):
+            raise ValidationError("Invalid data type, must be an array")
+        if not all(isinstance(_, int) for _ in value):
+            raise ValidationError("All elements must be positive integers")
 
 
-class ClientsInterestsRequest(object):
-    client_ids = ClientIDsField(requried=True)
-    date = DateField(requried=False, nullable=True)
+class DeclarativeFieldsMetaclass(type):
+    def __new__(meta, name, bases, attrs):
+        new_class = super(DeclarativeFieldsMetaclass, meta).__new__(meta, name, bases, attrs)
+        fields = []
+        for field_name, field in attrs.items():
+            if isinstance(field, Field):
+                field._name = field_name
+                fields.append((field_name, field))
+        new_class.fields = fields
+        return new_class
 
 
-class OnlineScoreRequest(object):
-    first_name = CharField(requried=False, nullable=True)
-    last_name = CharField(requried=False, nullable=True)
-    email = EmailField(requried=False, nullable=True)
-    phone = PhoneField(requried=False, nullable=True)
-    birthday = BirthDayField(requried=False, nullable=True)
-    gender = GenderField(requried=False, nullable=True)
+class BaseRequest(object):
+    def __init__(self, **kwargs):
+        self._errors = {}
+        for field_name, value in kwargs.items():
+            setattr(self, field_name, value)
+
+    def validate(self):
+        for name, field in self.fields:
+            if name not in self.__dict__:
+                if field.required:
+                    self._errors[name] = "This field is required"
+                continue
+
+            value = getattr(self, name)
+            try:
+                field.validate(value)
+            except ValidationError as e:
+                self._errors[name] = e.message
+
+    def __str__(self):
+        return '%s(%s)' % (
+            self.__class__.__name__,
+            ','.join(['%s="%s"'%(name, repr(getattr(self, name))) for name, _ in self.fields])
+        )
 
 
-class MethodRequest(object):
-    account = CharField(requried=False, nullable=True)
-    login = CharField(requried=True, nullable=True)
-    token = CharField(requried=True, nullable=True)
-    arguments = ArgumentsField(requried=True, nullable=True)
-    method = CharField(requried=True, nullable=True)
+class Request(BaseRequest):
+    __metaclass__ = DeclarativeFieldsMetaclass
+
+
+class ClientsInterestsRequest(Request):
+    client_ids = ClientIDsField(required=True)
+    date = DateField(required=False, nullable=True)
+
+
+class OnlineScoreRequest(Request):
+    first_name = CharField(required=False, nullable=True)
+    last_name = CharField(required=False, nullable=True)
+    email = EmailField(required=False, nullable=True)
+    phone = PhoneField(required=False, nullable=True)
+    birthday = BirthDayField(required=False, nullable=True)
+    gender = GenderField(required=False, nullable=True)
+
+    def validate(self):
+        super(OnlineScoreRequest, self).validate()
+        if not self._errors:
+            field_sets = [
+                ("phone", "email"),
+                ("first_name", "last_name"),
+                ("gender", "birthday")
+            ]
+            if not any(all(name in self.__dict__ for name in fields) for fields in field_sets):
+                self._errors["arguments"] = "Invalid arguments list"
+
+
+class MethodRequest(Request):
+    account = CharField(required=False, nullable=True)
+    login = CharField(required=True, nullable=True)
+    token = CharField(required=True, nullable=True)
+    arguments = ArgumentsField(required=True, nullable=True)
+    method = CharField(required=True, nullable=True)
 
     @property
     def is_admin(self):
@@ -176,8 +285,40 @@ def check_auth(request):
 
 
 def method_handler(request, ctx):
-    response, code = None, None
-    return response, code
+    requests = {
+        "clients_interests": ClientsInterestsRequest,
+        "online_score": OnlineScoreRequest,
+    }
+
+    method_request = MethodRequest(**request["body"])
+    method_request.validate()
+
+    if method_request._errors:
+        return method_request._errors, INVALID_REQUEST
+    if not check_auth(method_request):
+        return "Forbidden", FORBIDDEN
+
+    sub_request = requests[method_request.method](**method_request.arguments)
+    sub_request.validate()
+    if sub_request._errors:
+        return sub_request._errors, INVALID_REQUEST
+
+    if method_request.method == "online_score":
+        ctx['has'] = method_request.arguments.keys()  # Context?
+        if method_request.is_admin:
+            return {"score": 42}, OK
+        else:
+            return {"score": random.randint(0, 100)}, OK
+
+    if method_request.method == "clients_interests":
+        ctx['nclients'] = len(sub_request.client_ids)  # Context?
+        choices = ["books", "tv", "music", "it", "travel", "pets"]
+        response = {}
+        for client_id in sub_request.client_ids:
+            response[client_id] = [random.choice(choices) for _ in range(2)]
+        return response, OK
+
+    return {}, BAD_REQUEST
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):
