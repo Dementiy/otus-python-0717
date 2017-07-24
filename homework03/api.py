@@ -201,12 +201,14 @@ class Request(object):
 
     def __init__(self, **kwargs):
         self._errors = {}
+        self.base_fields = []
         for field_name, value in kwargs.items():
             setattr(self, field_name, value)
+            self.base_fields.append(field_name)
 
     def validate(self):
         for name, field in self.fields:
-            if name not in self.__dict__:
+            if name not in self.base_fields:
                 if field.required:
                     self._errors[name] = "This field is required"
                 continue
@@ -255,7 +257,7 @@ class OnlineScoreRequest(Request):
                 ("first_name", "last_name"),
                 ("gender", "birthday")
             ]
-            if not any(all(name in self.__dict__ for name in fields) for fields in field_sets):
+            if not any(all(name in self.base_fields for name in fields) for fields in field_sets):
                 self._errors["arguments"] = "Invalid arguments list"
 
 
@@ -281,41 +283,49 @@ def check_auth(request):
     return False
 
 
+class ClientsInterestsHandler(object):
+    choices = ["books", "tv", "music", "it", "travel", "pets"]
+
+    def process_request(self, request, context):
+        r = ClientsInterestsRequest(**request.arguments)
+        r.validate()
+        if not r.is_valid():
+            return r.errors, INVALID_REQUEST
+
+        resp_body = {cid: random.sample(self.choices, 2) for cid in r.client_ids}
+        context["nclients"] = len(r.client_ids)
+        return resp_body, OK
+
+
+class OnlineScoreHandler(object):
+
+    def process_request(self, request, context):
+        r = OnlineScoreRequest(**request.arguments)
+        r.validate()
+        if not r.is_valid():
+            return r.errors, INVALID_REQUEST
+
+        context["has"] = r.base_fields
+        score = 42 if request.is_admin else random.randint(0,100)
+        return {"score": score}, 200
+
+
 def method_handler(request, ctx):
-    requests = {
-        "clients_interests": ClientsInterestsRequest,
-        "online_score": OnlineScoreRequest,
+    handlers = {
+        "clients_interests": ClientsInterestsHandler,
+        "online_score": OnlineScoreHandler,
     }
 
     method_request = MethodRequest(**request["body"])
     method_request.validate()
 
-    if method_request._errors:
-        return method_request._errors, INVALID_REQUEST
+    if not method_request.is_valid():
+        return method_request.errors, INVALID_REQUEST
     if not check_auth(method_request):
         return "Forbidden", FORBIDDEN
 
-    sub_request = requests[method_request.method](**method_request.arguments)
-    sub_request.validate()
-    if sub_request._errors:
-        return sub_request._errors, INVALID_REQUEST
-
-    if method_request.method == "online_score":
-        ctx['has'] = method_request.arguments.keys()  # Context?
-        if method_request.is_admin:
-            return {"score": 42}, OK
-        else:
-            return {"score": random.randint(0, 100)}, OK
-
-    if method_request.method == "clients_interests":
-        ctx['nclients'] = len(sub_request.client_ids)  # Context?
-        choices = ["books", "tv", "music", "it", "travel", "pets"]
-        response = {}
-        for client_id in sub_request.client_ids:
-            response[client_id] = [random.choice(choices) for _ in range(2)]
-        return response, OK
-
-    return {}, BAD_REQUEST
+    handler = handlers[method_request.method]()
+    return handler.process_request(method_request, ctx)
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):
