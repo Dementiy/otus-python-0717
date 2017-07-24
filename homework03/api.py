@@ -281,17 +281,6 @@ def check_auth(request):
     return False
 
 
-class BaseMethodHandler(object):
-    __metaclass__ = abc.ABCMeta
-
-    def __init__(self, request):
-        self.request = request
-
-    @abc.abstractmethod
-    def process_request(self):
-        pass
-
-
 def method_handler(request, ctx):
     requests = {
         "clients_interests": ClientsInterestsRequest,
