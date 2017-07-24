@@ -115,32 +115,28 @@ class ValidationError(Exception):
 
 
 class Field(object):
+    __metaclass__ = abc.ABCMeta
     empty_values = (None, (), [], {}, '')
 
     def __init__(self, required=False, nullable=False):
         self.required = required
         self.nullable = nullable
 
+    @abc.abstractmethod
     def validate(self, value):
-        if value in self.empty_values and not self.nullable:
-            raise ValidationError("This field can't be blank")
-
-    def __get__(self, obj, type=None):
-        return obj.__dict__.get(self._name)
-
-    def __set__(self, obj, value):
-        obj.__dict__[self._name] = value
+        pass
 
 
 class CharField(Field):
     def validate(self, value):
-        super(CharField, self).validate(value)
         if not isinstance(value, string_types):
             raise ValidationError("This field must be a string")
 
 
 class ArgumentsField(Field):
-    pass
+    def validate(self, value):
+        if not isinstance(value, dict):
+            raise ValidationError("This field must be a dict")
 
 
 class EmailField(CharField):
@@ -152,7 +148,6 @@ class EmailField(CharField):
 
 class PhoneField(Field):
     def validate(self, value):
-        super(PhoneField, self).validate(value)
         if not isinstance(value, string_types) and not isinstance(value, int):
             raise ValidationError("Phone number must be numeric or string value")
         if not str(value).startswith("7"):
@@ -161,37 +156,31 @@ class PhoneField(Field):
 
 class DateField(Field):
     def validate(self, value):
-        super(DateField, self).validate(value)
         try:
             datetime.datetime.strptime(value, '%d.%m.%Y')
         except ValueError:
             raise ValidationError("Incorrect data format, should be DD.MM.YYYY")
 
 
-class BirthDayField(Field):
+class BirthDayField(DateField):
     def validate(self, value):
         super(BirthDayField, self).validate(value)
-        try:
-            bdate = datetime.datetime.strptime(value, '%d.%m.%Y')
-        except ValueError:
-            raise ValidationError("Incorrect data format, should be DD.MM.YYYY")
+        bdate = datetime.datetime.strptime(value, '%d.%m.%Y')
         if datetime.datetime.now().year - bdate.year > 70:
             raise ValidationError("Incorrect birth day")
 
 
 class GenderField(Field):
     def validate(self, value):
-        super(GenderField, self).validate(value)
         if value not in GENDERS:
             raise ValidationError("Gender must be equal to 0,1 or 2")
 
 
 class ClientIDsField(Field):
-    def validate(self, value):
-        super(ClientIDsField, self).validate(value)
-        if not isinstance(value, list):
+    def validate(self, values):
+        if not isinstance(values, list):
             raise ValidationError("Invalid data type, must be an array")
-        if not all(isinstance(_, int) for _ in value):
+        if not all(isinstance(v, int) and v >= 0 for v in values):
             raise ValidationError("All elements must be positive integers")
 
 
@@ -207,7 +196,9 @@ class DeclarativeFieldsMetaclass(type):
         return new_class
 
 
-class BaseRequest(object):
+class Request(object):
+    __metaclass__ = DeclarativeFieldsMetaclass
+
     def __init__(self, **kwargs):
         self._errors = {}
         for field_name, value in kwargs.items():
@@ -221,20 +212,26 @@ class BaseRequest(object):
                 continue
 
             value = getattr(self, name)
+            if value in field.empty_values and not field.nullable:
+                self._errors[name] = "This field can't be blank"
+
             try:
                 field.validate(value)
             except ValidationError as e:
                 self._errors[name] = e.message
 
-    def __str__(self):
+    @property
+    def errors(self):
+        return self._errors
+
+    def is_valid(self):
+        return not self.errors
+
+    def __repr__(self):
         return '%s(%s)' % (
             self.__class__.__name__,
             ','.join(['%s="%s"'%(name, repr(getattr(self, name))) for name, _ in self.fields])
         )
-
-
-class Request(BaseRequest):
-    __metaclass__ = DeclarativeFieldsMetaclass
 
 
 class ClientsInterestsRequest(Request):
@@ -282,6 +279,17 @@ def check_auth(request):
     if digest == request.token:
         return True
     return False
+
+
+class BaseMethodHandler(object):
+    __metaclass__ = abc.ABCMeta
+
+    def __init__(self, request):
+        self.request = request
+
+    @abc.abstractmethod
+    def process_request(self):
+        pass
 
 
 def method_handler(request, ctx):
