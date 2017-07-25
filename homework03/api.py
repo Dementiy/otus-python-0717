@@ -307,7 +307,7 @@ class OnlineScoreHandler(object):
 
         context["has"] = r.base_fields
         score = 42 if request.is_admin else random.randint(0,100)
-        return {"score": score}, 200
+        return {"score": score}, OK
 
 
 def method_handler(request, ctx):
@@ -316,7 +316,15 @@ def method_handler(request, ctx):
         "online_score": OnlineScoreHandler,
     }
 
-    method_request = MethodRequest(**request["body"])
+    try:
+        method_request = MethodRequest(**request["body"])
+    except KeyError:
+        return "The request must contain the argument body", INVALID_REQUEST
+    except TypeError:
+        return "Invalid request format", INVALID_REQUEST
+    except Exception:
+        return "Unexpected error", INVALID_REQUEST
+
     method_request.validate()
 
     if not method_request.is_valid():
