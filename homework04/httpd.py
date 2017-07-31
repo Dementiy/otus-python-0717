@@ -218,16 +218,21 @@ def parse_args():
     parser = argparse.ArgumentParser("Simple asynchronous web-server")
     parser.add_argument("--host", dest="host", default="127.0.0.1")
     parser.add_argument("--port", dest="port", type=int, default=9000)
+    parser.add_argument("--log", dest="loglevel", default="info")
+    parser.add_argument("--logfile", dest="logfile", default=None)
     parser.add_argument("-w", dest="nworkers", type=int, default=1)
     parser.add_argument("-r", dest="document_root", default=".")
     return parser.parse_args()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG,
+    args = parse_args()
+
+    logging.basicConfig(
+        filename=args.logfile,
+        level=getattr(logging, args.loglevel.upper()),
         format="%(name)s: %(process)d %(message)s")
     log = logging.getLogger(__name__)
 
-    args = parse_args()
     DOCUMENT_ROOT = args.document_root
     for _ in xrange(args.nworkers-1):
         pid = os.fork()
