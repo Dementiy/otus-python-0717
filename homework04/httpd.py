@@ -206,7 +206,7 @@ class AsyncServer(asyncore.dispatcher):
 
     def serve_forever(self):
         try:
-            asyncore.loop(timeout=5, use_poll=True)
+            asyncore.loop(timeout=5, use_poll=True, poller=asyncore.epoll_poller)
         except KeyboardInterrupt:
             log.debug("Worker shutdown")
         finally:
