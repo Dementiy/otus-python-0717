@@ -54,10 +54,10 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
             else:
                 request_body = ""
 
-            headers_list = map(lambda header: header.split(':', 1),
-                headers_list[1:])
-            headers.update(dict(filter(lambda header: len(header)>1,
-                headers_list)))
+            for header in headers_list[1:]:
+                header = header.split(':', 1)
+                if len(header) > 1:
+                    headers[header[0]] = header[1].strip()
 
             query_params = {}
             parts = uri.split('?', 1)
