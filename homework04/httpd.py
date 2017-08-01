@@ -30,15 +30,35 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
 
     def __init__(self, sock):
         asynchat.async_chat.__init__(self, sock)
+        self.reading_headers = True
         self.set_terminator("\r\n\r\n")
 
     def collect_incoming_data(self, data):
         self._collect_incoming_data(data)
 
     def found_terminator(self):
-        self.handle_request()
+        self.parse_request()
 
     def parse_request(self):
+        if self.reading_headers:
+            self.reading_headers = False
+            if not self.parse_headers():
+                self.send_error(400)
+                self.handle_close()
+                return
+
+            if self.method == "POST":
+                clen = self.headers["Content-Length"]
+                self.set_terminator(int(clen))
+            else:
+                self.set_terminator(None)
+                self.handle_request()
+        else:
+            self.set_terminator(None)
+            self.request_body = self._get_data()
+            self.handle_request()
+
+    def parse_headers(self):
         try:
             headers_list = self._get_data().split("\r\n")
             method, uri, protocol = headers_list[0].split(" ")
@@ -48,11 +68,6 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
                 "uri": uri,
                 "protocol": protocol
             }
-
-            if method == "POST":
-                request_body = headers_list[-1]
-            else:
-                request_body = ""
 
             for header in headers_list[1:]:
                 header = header.split(':', 1)
@@ -70,17 +85,13 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
             self.http_protocol = protocol
             self.query_params = query_params
             self.headers = headers
-            self.request_body = request_body
+            self.request_body = ""
             return True
         except Exception as e:
             print e
             return False
 
     def handle_request(self):
-        if not self.parse_request():
-            self.send_error(400)
-            self.handle_close()
-            return
         method_name = 'do_' + self.method
         if not hasattr(self, method_name):
             self.send_error(405)
