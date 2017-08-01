@@ -1,5 +1,4 @@
-#import asyncore_epoll as asyncore
-import asyncore
+import asyncore_epoll as asyncore
 import asynchat
 import socket
 import logging
