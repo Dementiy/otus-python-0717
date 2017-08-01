@@ -1,5 +1,4 @@
-#import asyncore_epoll as asyncore
-import asyncore
+import asyncore_epoll as asyncore
 import asynchat
 import socket
 import logging
@@ -22,23 +21,59 @@ class FileProducer(object):
             data = self.file.read(self.chunk_size)
             if data:
                 return data
+            self.file.close()
             self.file = None
         return ""
+
+
+def url_normalize(path):
+    if path.startswith("."):
+        path = "/" + path
+    while "../" in path:
+        p1 = path.find("/..")
+        p2 = path.rfind("/", 0, p1)
+        if p2 != -1:
+            path = path[:p2] + path[p1+3:]
+        else:
+            path = path.replace("/..", "", 1)
+    path = path.replace("/./", "/")
+    path = path.replace("/.", "")
+    return path
 
 
 class AsyncHTTPRequestHandler(asynchat.async_chat):
 
     def __init__(self, sock):
         asynchat.async_chat.__init__(self, sock)
+        self.reading_headers = True
         self.set_terminator("\r\n\r\n")
 
     def collect_incoming_data(self, data):
         self._collect_incoming_data(data)
 
     def found_terminator(self):
-        self.handle_request()
+        self.parse_request()
 
     def parse_request(self):
+        if self.reading_headers:
+            self.reading_headers = False
+            if not self.parse_headers():
+                self.send_error(400)
+                self.handle_close()
+                return
+
+            if self.method == "POST":
+                clen = self.headers["Content-Length"]
+                self.set_terminator(int(clen))
+            else:
+                self.set_terminator(None)
+                self.handle_request()
+        else:
+            self.set_terminator(None)
+            self.request_body = self._get_data()
+            self.handle_request()
+
+    def parse_headers(self):
         try:
             headers_list = self._get_data().split("\r\n")
             method, uri, protocol = headers_list[0].split(" ")
@@ -49,15 +84,10 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
                 "protocol": protocol
             }
 
-            if method == "POST":
-                request_body = headers_list[-1]
-            else:
-                request_body = ""
-
-            headers_list = map(lambda header: header.split(':', 1),
-                headers_list[1:])
-            headers.update(dict(filter(lambda header: len(header)>1,
-                headers_list)))
+            for header in headers_list[1:]:
+                header = header.split(':', 1)
+                if len(header) > 1:
+                    headers[header[0]] = header[1].strip()
 
             query_params = {}
             parts = uri.split('?', 1)
@@ -70,17 +100,13 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
             self.http_protocol = protocol
             self.query_params = query_params
             self.headers = headers
-            self.request_body = request_body
+            self.request_body = ""
             return True
         except Exception as e:
             print e
             return False
 
     def handle_request(self):
-        if not self.parse_request():
-            self.send_error(400)
-            self.handle_close()
-            return
         method_name = 'do_' + self.method
         if not hasattr(self, method_name):
             self.send_error(405)
@@ -149,10 +175,9 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
         return f
 
     def translate_path(self, path):
-        # NOTE: This method is not safe!
         path = path.split('?', 1)[0]
         path = path.split('#', 1)[0]
-        path = os.path.normpath(urllib.unquote(path))
+        path = url_normalize(urllib.unquote(path))
 
         parts = path.split('/')
         path = DOCUMENT_ROOT
@@ -165,8 +190,7 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
         f = self.send_head()
         if f:
             self.push_with_producer(FileProducer(f))
-            f.close()
-            self.handle_close()
+            self.close_when_done()
 
     def do_HEAD(self):
         f = self.send_head()
@@ -207,7 +231,7 @@ class AsyncServer(asyncore.dispatcher):
 
     def serve_forever(self):
         try:
-            asyncore.loop(timeout=5, use_poll=True)
+            asyncore.loop(timeout=5, use_poll=True, poller=asyncore.epoll_poller)
         except KeyboardInterrupt:
             log.debug("Worker shutdown")
         finally:

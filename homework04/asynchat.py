@@ -46,7 +46,7 @@ method) up to the terminator, and then control will be returned to
 you - by calling your self.found_terminator() method.
 """
 
-import asyncore
+import asyncore_epoll as asyncore
 import errno
 import socket
 from collections import deque
@@ -250,7 +250,7 @@ class async_chat (asyncore.dispatcher):
                 else:
                     del self.producer_fifo[0]
             # we tried to send some actual data
-        return
+            return
 
     def discard_buffers (self):
         # Emergencies only!
