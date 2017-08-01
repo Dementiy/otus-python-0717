@@ -22,6 +22,7 @@ class FileProducer(object):
             data = self.file.read(self.chunk_size)
             if data:
                 return data
+            self.file.close()
             self.file = None
         return ""
 
@@ -165,8 +166,7 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
         f = self.send_head()
         if f:
             self.push_with_producer(FileProducer(f))
-            f.close()
-            self.handle_close()
+            self.close_when_done()
 
     def do_HEAD(self):
         f = self.send_head()
