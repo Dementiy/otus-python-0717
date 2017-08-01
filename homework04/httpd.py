@@ -26,6 +26,21 @@ class FileProducer(object):
         return ""
 
 
+def url_normalize(path):
+    if path.startswith("."):
+        path = "/" + path
+    while "../" in path:
+        p1 = path.find("/..")
+        p2 = path.rfind("/", 0, p1)
+        if p2 != -1:
+            path = path[:p2] + path[p1+3:]
+        else:
+            path = path.replace("/..", "", 1)
+    path = path.replace("/./", "/")
+    path = path.replace("/.", "")
+    return path
+
+
 class AsyncHTTPRequestHandler(asynchat.async_chat):
 
     def __init__(self, sock):
@@ -160,10 +175,9 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
         return f
 
     def translate_path(self, path):
-        # NOTE: This method is not safe!
         path = path.split('?', 1)[0]
         path = path.split('#', 1)[0]
-        path = os.path.normpath(urllib.unquote(path))
+        path = url_normalize(urllib.unquote(path))
 
         parts = path.split('/')
         path = DOCUMENT_ROOT
