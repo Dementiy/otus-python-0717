@@ -1,6 +1,7 @@
 import asyncore_epoll as asyncore
 import asynchat
 import socket
+import multiprocessing
 import logging
 import mimetypes
 import os
@@ -63,7 +64,7 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
                 return
 
             if self.method == "POST":
-                clen = self.headers["Content-Length"]
+                clen = self.headers.get("Content-Length", 0)
                 if int(clen) > 0:
                     self.set_terminator(int(clen))
                 else:
@@ -247,6 +248,11 @@ def parse_args():
     parser.add_argument("-r", dest="document_root", default=".")
     return parser.parse_args()
 
+def run():
+    server = AsyncServer(host=args.host, port=args.port)
+    server.serve_forever()
+
+
 if __name__ == "__main__":
     args = parse_args()
 
@@ -257,10 +263,13 @@ if __name__ == "__main__":
     log = logging.getLogger(__name__)
 
     DOCUMENT_ROOT = args.document_root
-    for _ in xrange(args.nworkers-1):
-        pid = os.fork()
-        if not pid:
-            break
-    server = AsyncServer(host=args.host, port=args.port)
-    server.serve_forever()
+    for _ in xrange(args.nworkers):
+        p = multiprocessing.Process(target=run)
+        p.start()
+    #for _ in xrange(args.nworkers-1):
+    #    pid = os.fork()
+    #    if not pid:
+    #        break
+    #server = AsyncServer(host=args.host, port=args.port)
+    #server.serve_forever()
 
