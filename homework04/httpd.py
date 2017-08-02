@@ -210,7 +210,6 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
     }
 
 
-
 class AsyncServer(asyncore.dispatcher):
 
     def __init__(self, host="127.0.0.1", port=9000):
@@ -252,7 +251,6 @@ def run():
     server = AsyncServer(host=args.host, port=args.port)
     server.serve_forever()
 
-
 if __name__ == "__main__":
     args = parse_args()
 
@@ -266,10 +264,4 @@ if __name__ == "__main__":
     for _ in xrange(args.nworkers):
         p = multiprocessing.Process(target=run)
         p.start()
-    #for _ in xrange(args.nworkers-1):
-    #    pid = os.fork()
-    #    if not pid:
-    #        break
-    #server = AsyncServer(host=args.host, port=args.port)
-    #server.serve_forever()
 
