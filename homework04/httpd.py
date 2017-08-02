@@ -64,7 +64,10 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
 
             if self.method == "POST":
                 clen = self.headers["Content-Length"]
-                self.set_terminator(int(clen))
+                if int(clen) > 0:
+                    self.set_terminator(int(clen))
+                else:
+                    self.handle_request()
             else:
                 self.set_terminator(None)
                 self.handle_request()
@@ -178,12 +181,8 @@ class AsyncHTTPRequestHandler(asynchat.async_chat):
         path = path.split('?', 1)[0]
         path = path.split('#', 1)[0]
         path = url_normalize(urllib.unquote(path))
-
         parts = path.split('/')
-        path = DOCUMENT_ROOT
-        for part in parts:
-            path = os.path.join(path, part)
-
+        path = os.path.join(DOCUMENT_ROOT, *parts)
         return path
 
     def do_GET(self):
