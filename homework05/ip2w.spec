@@ -58,7 +58,6 @@ systemctl daemon-reload
 %clean
 [ "%{buildroot}" != "/" ] && rm -fr %{buildroot}
 
-
 %files
 %{__logdir}
 %{__bindir}

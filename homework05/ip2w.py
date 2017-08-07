@@ -66,9 +66,9 @@ def application(env, start_response):
     if not is_valid(ip):
         return response_with_error(message="Invalid IP address")
 
-    #appId = os.environ.get("WEATHER_APPID")
-    #if not appId:
-    #    return response_with_error(message="Set the environment variable WEATHER_APPID")
+    appId = os.environ.get("WEATHER_APPID")
+    if not appId:
+        return response_with_error(message="Set the environment variable WEATHER_APPID")
 
     ipinfo = get_ipinfo(ip)
     if "bogon" in ipinfo:
@@ -81,7 +81,7 @@ def application(env, start_response):
         )
 
     lat, lon = ipinfo["loc"].split(",")
-    weather_data = get_weather(lat, lon, "a46b3bb83f9e16e2ee203e9ecfca99f8")
+    weather_data = get_weather(lat, lon, appId)
     if "status" in weather_data:
         return response_with_error(
             status=weather_data["status"],
