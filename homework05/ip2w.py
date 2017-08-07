@@ -1,7 +1,4 @@
 import requests
-#from requests.adapters import HTTPAdapter
-#from requests.packages.urllib3.util import Retry
-#from requests import Session
 from requests import exceptions
 import json
 import socket
@@ -21,20 +18,6 @@ def get(url, params={}, timeout=5, max_retries=5, backoff_factor=0.3):
             backoff_value = backoff_factor * (2 ** n)
             time.sleep(backoff_value)
 
-"""
-def get(url, params={}, timeout=5, max_retries=3):
-    s = Session()
-    s.mount("https://", HTTPAdapter(
-        max_retries=Retry(total=max_retries, backoff_factor=0.3, status_forcelist=[500, 503])
-    ))
-    try:
-        return s.get(url, timeout=timeout, params=params)
-    except exceptions.RetryError as e:
-        print e
-        return None
-    except Exception as e:
-        print "Oops", e
-"""
 
 def get_ipinfo(ip):
     url = "https://ipinfo.io/{ip}".format(ip=ip)
@@ -83,9 +66,9 @@ def application(env, start_response):
     if not is_valid(ip):
         return response_with_error(message="Invalid IP address")
 
-    appId = os.environ.get("WEATHER_APPID")
-    if not appId:
-        return response_with_error(message="Set the environment variable WEATHER_APPID")
+    #appId = os.environ.get("WEATHER_APPID")
+    #if not appId:
+    #    return response_with_error(message="Set the environment variable WEATHER_APPID")
 
     ipinfo = get_ipinfo(ip)
     if "bogon" in ipinfo:
@@ -98,7 +81,7 @@ def application(env, start_response):
         )
 
     lat, lon = ipinfo["loc"].split(",")
-    weather_data = get_weather(lat, lon, appId)
+    weather_data = get_weather(lat, lon, "a46b3bb83f9e16e2ee203e9ecfca99f8")
     if "status" in weather_data:
         return response_with_error(
             status=weather_data["status"],
