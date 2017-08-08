@@ -13,7 +13,8 @@ Requires(post): systemd
 Requires(preun): systemd
 Requires(postun): systemd
 BuildRequires: systemd
-Requires: python, python-requests
+Requires: python
+Requires: python-requests
 Summary: Example of uWSGI daemon
 
 
@@ -42,7 +43,7 @@ rm -rf %{buildroot}
 %{__mkdir} -p %{buildroot}/%{__logdir}
 
 %{__install} -pD -m 644 %{name}.service %{buildroot}/%{__systemddir}/%{name}.service
-%{__install} -pD -m 644 %{name}.py %{buildroot}/%{__bindir}/%{name}.py
+%{__install} -pD -m 755 %{name}.py %{buildroot}/%{__bindir}/%{name}.py
 %{__install} -pD -m 644 %{name}.ini %{buildroot}/%{__etcdir}/%{name}.ini
 
 %post
