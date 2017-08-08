@@ -6,8 +6,9 @@ import time
 import os
 
 
-def get(url, params={}, timeout=5, max_retries=5, backoff_factor=0.3):
-    for n in xrange(max_retries):
+def get(url, params={}, timeout=5, backoff_factor=0.3):
+    MAX_RETRIES = os.environ.get("MAX_RETRIES", 5)
+    for n in xrange(MAX_RETRIES):
         try:
             r = requests.get(url, params=params, timeout=timeout)
             r.raise_for_status()
