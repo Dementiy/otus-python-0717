@@ -25,7 +25,10 @@ def get_ipinfo(ip):
         response = get(url)
     except requests.exceptions.RequestException as err:
         return {"status": err.response.status_code, "message": err.message}
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as err:
+        return {"status": response.status_code, "message": err.message}
 
 
 def get_weather(lat, lon, appid):
@@ -39,7 +42,10 @@ def get_weather(lat, lon, appid):
         })
     except requests.exceptions.RequestException as err:
         return {"status": err.response.status_code, "message": err.message}
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as err:
+        return {"status": response.status_code, "message": err.message}
 
 
 def is_valid(ip):
