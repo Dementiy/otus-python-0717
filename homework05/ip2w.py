@@ -86,7 +86,11 @@ def application(env, start_response):
             message=ipinfo["message"]
         )
 
-    lat, lon = ipinfo["loc"].split(",")
+    try:
+        lat, lon = ipinfo["loc"].split(",")
+    except KeyError:
+        return response_with_error(message="Invalid JSON-scheme (ipinfo)")
+
     weather_data = get_weather(lat, lon, appId)
     if "status" in weather_data:
         return response_with_error(
@@ -94,9 +98,12 @@ def application(env, start_response):
             message=weather_data["message"]
         )
 
-    city = weather_data["name"]
-    temp = weather_data["main"]["temp"]
-    description = weather_data["weather"][0]["description"]
+    try:
+        city = weather_data["name"]
+        temp = weather_data["main"]["temp"]
+        description = weather_data["weather"][0]["description"]
+    except (KeyError, IndexError):
+        return response_with_error(message="Invalid JSON-scheme (openweathermap)")
 
     response_body = json.dumps({
         "city": city,
