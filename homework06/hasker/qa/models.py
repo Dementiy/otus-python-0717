@@ -17,6 +17,14 @@ class TimestampedModel(models.Model):
 
 
 @python_2_unicode_compatible
+class Tag(models.Model):
+    name = models.CharField(max_length=30)
+
+    def __str__(self):
+        return self.name
+
+
+@python_2_unicode_compatible
 class Question(TimestampedModel):
     slug = models.SlugField(max_length=254)
     title = models.CharField(max_length=254)
@@ -24,6 +32,7 @@ class Question(TimestampedModel):
     author = models.ForeignKey(User, related_name="questions", on_delete=models.CASCADE)
     votes = models.IntegerField(default=0)
     answered = models.BooleanField(default=False)
+    tags = models.ManyToManyField(Tag, related_name='questions')
 
     def save(self, *args, **kwargs):
         if not self.id:
