@@ -5,7 +5,7 @@
 {% for question in questions %}
     <div class="item">
         <div class="content">
-            <a class="header">{{ question.title }}</a>
+            <a href="{% url 'qa:question' question.slug %}" class="header">{{ question.title }}</a>
             <div class="meta">
                 asked by {{ question.author.username }} | {{ question.created_at|timesince }} ago
             </div>
