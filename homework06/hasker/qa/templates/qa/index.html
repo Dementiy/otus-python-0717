@@ -21,7 +21,7 @@
                 {% endif %}
                 Answers<div class="detail">{{ question.answers.count }}</div></div>
                 {% for tag in question.tags.all %}
-                    <a class="ui blue label">{{ tag.name }}</a>
+                    <a href="{% url 'qa:search' %}?q=tag:{{ tag.name }}" class="ui blue label">{{ tag.name }}</a>
                 {% endfor %}
             </div>
         </div>
