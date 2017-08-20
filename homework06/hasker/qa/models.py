@@ -31,8 +31,25 @@ class QuestionManager(models.Manager):
         return self.order_by('-votes', '-created_at')[:5]
 
 
+class VotableMixin(object):
+
+    def vote(self, user, value):
+        if user == self.author:
+            return None
+        vote, created = self.get_vote_object(user)
+        if created:
+            vote.value = True if value > 0 else False
+            vote.save()
+            self.votes += value
+            self.save()
+        elif vote.value != (True if value > 0 else False):
+            vote.delete()
+            self.votes += value
+            self.save()
+
+
 @python_2_unicode_compatible
-class Question(TimestampedModel):
+class Question(VotableMixin, TimestampedModel):
     slug = models.SlugField(max_length=254)
     title = models.CharField(max_length=254)
     text = models.TextField()
@@ -52,17 +69,23 @@ class Question(TimestampedModel):
             "slug": self.slug,
         })
 
+    def get_vote_object(self, user):
+        return QuestionVote.objects.get_or_create(user=user, question=self)
+
     def __str__(self):
         return self.title
 
 
 @python_2_unicode_compatible
-class Answer(TimestampedModel):
+class Answer(VotableMixin, TimestampedModel):
     text = models.TextField()
     author = models.ForeignKey(User, related_name="answers", on_delete=models.CASCADE)
     question = models.ForeignKey(Question, related_name="answers", on_delete=models.CASCADE)
     answer = models.BooleanField(default=False)
     votes = models.IntegerField(default=0)
+
+    def get_vote_object(self, user):
+        return AnswerVote.objects.get_or_create(user=user, answer=self)
 
     def __str__(self):
         return self.text
