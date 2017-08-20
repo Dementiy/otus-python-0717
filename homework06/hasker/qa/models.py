@@ -84,6 +84,21 @@ class Answer(VotableMixin, TimestampedModel):
     answer = models.BooleanField(default=False)
     votes = models.IntegerField(default=0)
 
+    def mark(self):
+        if self.question.answered and self.answer:
+            self.question.answered = False
+            self.answer = not self.answer
+            self.question.save()
+            self.save()
+            return True
+        elif not self.question.answered:
+            self.question.answered = True
+            self.answer = True
+            self.question.save()
+            self.save()
+            return True
+        return False
+
     def get_vote_object(self, user):
         return AnswerVote.objects.get_or_create(user=user, answer=self)
 
