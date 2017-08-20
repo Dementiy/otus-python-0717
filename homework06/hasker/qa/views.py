@@ -4,12 +4,13 @@ import operator
 
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.views.generic import ListView
+from django.views.generic import ListView, DetailView
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from .models import Question, Tag
-from .forms import QuestionForm
+from .forms import QuestionForm, AnswerForm
 
 
 class IndexView(ListView):
@@ -56,4 +57,32 @@ def ask(request):
     return render(request, "qa/ask.html", {
         "form": form
     })
+
+
+class QuestionView(DetailView):
+    model = Question
+    context_object_name = 'question'
+    template_name = 'qa/question.html'
+
+    def get_context_data(self, **kwargs):
+        context_data = super(QuestionView, self).get_context_data(**kwargs)
+        question = self.get_object()
+        answers = question.answers.order_by('-votes', '-created_at')
+
+        paginator = Paginator(answers, 5)
+        page = self.request.GET.get('page')
+        try:
+            answers = paginator.page(page)
+        except PageNotAnInteger:
+            answers = paginator.page(1)
+        except EmptyPage:
+            answers = paginator.page(paginator.num_pages)
+
+        form = AnswerForm()
+        context_data.update({
+            "answers": answers,
+            "form": form
+        })
+
+        return context_data
 

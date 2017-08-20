@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Question
+from .models import Question, Answer
 
 
 class TagWidget(forms.TextInput):
@@ -16,4 +16,12 @@ class QuestionForm(forms.ModelForm):
     class Meta:
         model = Question
         fields = ("title", "text", "tags",)
+
+
+class AnswerForm(forms.ModelForm):
+    text = forms.CharField(label='', widget=forms.Textarea, required=True)
+
+    class Meta:
+        model = Answer
+        fields = ("text",)
 
