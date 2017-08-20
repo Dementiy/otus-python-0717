@@ -52,7 +52,15 @@
             </div>
         </div>
         <div class="two wide column">
-            <!-- Trending questions -->
+            <div class="ui relaxed divided list">
+                <h3>Trending</h3>
+                {% for question in trending %}
+                <div class="item">
+                    <i class="ui label">{{ question.votes }}</i>
+                    <a href="{{ question.get_absolute_url }}">{{ question.title }}</a>
+                </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
     {% block javascript %}{% endblock %}
