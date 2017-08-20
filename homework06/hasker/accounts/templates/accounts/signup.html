@@ -1,5 +1,19 @@
-<form method="post" enctype="multipart/form-data">
+{% extends "base.html" %}
+
+{% block content %}
+<form class="ui form" method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    {{ form.as_p }}
-    <input type="submit" value="Sign Up"/>
+    {% for field in form %}
+    <p>
+        <b>{{ field.label }}</b>
+        {{ field }}
+        {% if field.errors %}
+        <div class="ui red message">
+            {{ field.errors }}
+        </div>
+        {% endif %}
+    </p>
+    {% endfor %}
+    <input class="ui primary button" type="submit" value="Sign Up" />
 </form>
+{% endblock %}
