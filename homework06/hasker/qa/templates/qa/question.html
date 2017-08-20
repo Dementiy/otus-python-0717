@@ -1,6 +1,8 @@
 {% extends "base.html" %}
-{% block content %}
 
+{% load staticfiles %}
+
+{% block content %}
 <div class="ui black segment">
     <div class="ui items">
         <div class="item">
@@ -19,11 +21,11 @@
 
                     <!-- Votes -->
                     {% if user.is_authenticated and user != question.author %}
-                        <a><i class="arrow red down icon"></i></a>
-                        <i class="ui label">{{ question.votes }}</i>
-                        <a><i class="arrow teal up icon"></i></a>
+                        <a onClick="questionVoteDown({{ question.id }});"><i class="arrow red down icon"></i></a>
+                        <i id="question_vote" class="ui label">{{ question.votes }}</i>
+                        <a onClick="questionVoteUp({{ question.id }});"><i class="arrow teal up icon"></i></a>
                     {% else %}
-                        <i class="ui label">Votes: {{ question.votes }}</i>
+                        <i id="question_vote" class="ui label">Votes: {{ question.votes }}</i>
                     {% endif %}
 
                     <!-- Tags -->
@@ -48,9 +50,9 @@
                 <p>Answered by {{ answer.author.username }} | {{ answer.created_at|timesince }} ago</p>
                 <!-- User can't vote for own answer -->
                 {% if user.is_authenticated and user != answer.author %}
-                    <a><i class="arrow red down icon"></i></a>
-                    <i class="ui label">{{ answer.votes }}</i>
-                    <a><i class="arrow teal up icon"></i></a>
+                    <a onClick="answerVoteDown({{ answer.id }});"><i class="arrow red down icon"></i></a>
+                    <i id="answer_vote{{ answer.id }}" class="ui label">{{ answer.votes }}</i>
+                    <a onClick="answerVoteUp({{ answer.id }});"><i class="arrow teal up icon"></i></a>
                 {% else %}
                     <i class="ui label">Votes: {{ answer.votes }}</i>
                 {% endif %}
@@ -58,9 +60,9 @@
                 <!-- Only author of question can mark answer -->
                 {% if user == question.author %}
                     {% if answer.answer %}
-                        <a class="ui right floated green label">
+                        <a id="answer{{ answer.id }}" onClick="mark({{ answer.id }});" class="ui right floated green label">
                     {% else %}
-                        <a class="ui right floated grey label">
+                        <a id="answer{{ answer.id }}" onClick="mark({{ answer.id }});" class="ui right floated grey label">
                     {% endif %}
                     <i class="checkmark icon"></i>mark</a>
                 {% else %}
@@ -107,3 +109,7 @@
 {% endif %}
 {% endblock %}
 
+{% block javascript %}
+<script src="{% static 'js/main.js' %}"></script>
+<script src="{% static 'js/qa.js' %}"></script>
+{% endblock %}
