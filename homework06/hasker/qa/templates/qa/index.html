@@ -1,0 +1,5 @@
+{% if questions %}
+    {% for question in questions %}
+        <li>{{ question.title }}</li>
+    {% endfor %}
+{% endif %}
