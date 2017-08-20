@@ -86,3 +86,19 @@ class QuestionView(DetailView):
 
         return context_data
 
+    def post(self, request, *args, **kwargs):
+        self.object = question = self.get_object()
+
+        form = AnswerForm(request.POST)
+        if form.is_valid():
+            answer = form.save(commit=False)
+            answer.author = request.user
+            answer.question = question
+            answer.save()
+            return redirect(reverse('qa:question', kwargs={
+                "slug": question.slug
+            }))
+        else:
+            context = self.get_context_data()
+            return self.render_to_response(context)
+
