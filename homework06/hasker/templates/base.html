@@ -30,14 +30,14 @@
                     <img class="ui mini image" style="margin-right: 10px;" src="{{ user.profile.avatar.url }}">
                     <a>{{ user.username }}</a>
                 </div>
-                <a class="item">
+                <a href="{% url 'accounts:logout' %}" class="item">
                     <div class="ui primary button">Logout</div>
                 </a>
             {% else %}
                 <a href="{% url 'accounts:signup' %}" class="item">
 			        <div class="ui primary button">Sign up</div>
 		        </a>
-                <a class="item">
+                <a href="{% url 'accounts:login' %}" class="item">
 			        <div class="ui button">Log-in</div>
 		        </a>
             {% endif %}
