@@ -6,6 +6,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.generic import ListView, DetailView
 from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
 from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
@@ -86,6 +87,7 @@ class QuestionView(DetailView):
 
         return context_data
 
+    @method_decorator(login_required)
     def post(self, request, *args, **kwargs):
         self.object = question = self.get_object()
 
@@ -99,6 +101,7 @@ class QuestionView(DetailView):
                 "slug": question.slug
             }))
         else:
+            # TODO: Add 'form' to context for display errors
             context = self.get_context_data()
             return self.render_to_response(context)
 
