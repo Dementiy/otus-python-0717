@@ -67,3 +67,19 @@ class Answer(TimestampedModel):
     def __str__(self):
         return self.text
 
+
+class Vote(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    value = models.BooleanField(default=True)
+
+    class Meta:
+        abstract = True
+
+
+class QuestionVote(Vote):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+
+
+class AnswerVote(Vote):
+    answer = models.ForeignKey(Answer, on_delete=models.CASCADE)
+
