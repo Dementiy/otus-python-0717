@@ -5,12 +5,15 @@ import operator
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.generic import ListView, DetailView
+from django.views.generic.detail import BaseDetailView
+from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.decorators import method_decorator
 from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .models import Question, Tag
+from .models import Question, Answer, Tag
 from .forms import QuestionForm, AnswerForm
 
 
@@ -104,4 +107,34 @@ class QuestionView(DetailView):
             # TODO: Add 'form' to context for display errors
             context = self.get_context_data()
             return self.render_to_response(context)
+
+
+class JsonVote(LoginRequiredMixin, BaseDetailView):
+
+    def post(self, request, *args, **kwargs):
+        value = int(request.POST.get("value"))
+        obj = self.get_object()
+        obj.vote(request.user, value)
+        return JsonResponse({
+            "votes": obj.votes
+        })
+
+
+class JsonQuestionVote(JsonVote):
+    model = Question
+
+
+class JsonAnswerVote(JsonVote):
+    model = Answer
+
+
+class JsonAnswerMark(LoginRequiredMixin, BaseDetailView):
+    model = Answer
+
+    def post(self, request, *args, **kwargs):
+        answer = self.get_object()
+        marked = answer.mark()
+        return JsonResponse({
+            "mark": marked
+        })
 
