@@ -100,6 +100,7 @@ class QuestionView(DetailView):
             answer.author = request.user
             answer.question = question
             answer.save()
+            question.notify_author(request)
             return redirect(reverse('qa:question', kwargs={
                 "slug": question.slug
             }))
