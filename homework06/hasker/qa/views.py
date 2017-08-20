@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+import operator
 
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.generic import ListView
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 
 from .models import Question, Tag
 from .forms import QuestionForm
@@ -15,6 +17,26 @@ class IndexView(ListView):
     template_name = 'qa/index.html'
     context_object_name = 'questions'
     paginate_by = 5
+
+
+class SearchView(IndexView):
+
+    def get_queryset(self):
+        queryset = Question.objects.order_by('-votes', '-created_at')
+        query = self.request.GET.get('q')
+        if not query:
+            return Question.objects.none()
+        if query.startswith('tag:'):
+            queryset = queryset.filter(tags__name=query[4:])
+        else:
+            query_list = query.split()
+            queryset = queryset.filter(
+                reduce(operator.and_,
+                    (Q(title__icontains=q) for q in query_list)) |
+                reduce(operator.and_,
+                    (Q(text__icontains=q) for q in query_list))
+            )
+        return queryset
 
 
 @login_required()

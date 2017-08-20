@@ -18,8 +18,10 @@
         <div class="right menu">
             <div class="item">
                 <div class="ui icon input">
-                    <input type="text" name="q" placeholder="Search...">
-                    <i class="search link icon"></i>
+                    <form method="get" action="{% url 'qa:search' %}">
+                        <input type="text" name="q" placeholder="Search...">
+                        <i class="search link icon"></i>
+                    </form>
                 </div>
             </div>
             {% if user.is_authenticated %}
