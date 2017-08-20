@@ -8,7 +8,7 @@ from .forms import SignUpForm
 
 def signup(request):
     if request.user.is_authenticated:
-        return redirect("")
+        return redirect("qa:index")
 
     if request.method == "POST":
         form = SignUpForm(request.POST, request.FILES)
@@ -20,7 +20,7 @@ def signup(request):
             raw_password = form.cleaned_data.get("password1")
             user = authenticate(username=user.username, password=raw_password)
             login(request, user)
-            return redirect('')
+            return redirect("qa:index")
     else:
         form = SignUpForm()
     return render(request, "accounts/signup.html", {
