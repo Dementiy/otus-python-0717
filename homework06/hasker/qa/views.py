@@ -11,4 +11,5 @@ class IndexView(ListView):
     model = Question
     template_name = 'qa/index.html'
     context_object_name = 'questions'
+    paginate_by = 5
 
