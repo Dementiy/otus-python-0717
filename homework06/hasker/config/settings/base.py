@@ -99,3 +99,6 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     root('static'),
 ]
+
+
+LOGIN_REDIRECT_URL = '/'
