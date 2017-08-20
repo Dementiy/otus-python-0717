@@ -30,7 +30,7 @@
                 </a>
                 <div class="item">
                     <img class="ui mini image" style="margin-right: 10px;" src="{{ user.profile.avatar.url }}">
-                    <a>{{ user.username }}</a>
+                    <a href="{% url 'accounts:profile' %}">{{ user.username }}</a>
                 </div>
                 <a href="{% url 'accounts:logout' %}" class="item">
                     <div class="ui primary button">Logout</div>
