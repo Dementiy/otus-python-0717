@@ -23,7 +23,7 @@
                 </div>
             </div>
             {% if user.is_authenticated %}
-                <a class="item">
+                <a href="{% url 'qa:ask' %}" class="item">
                     Ask Question!
                 </a>
                 <div class="item">
