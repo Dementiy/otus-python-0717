@@ -3,8 +3,9 @@ from __future__ import unicode_literals
 
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login
+from django.contrib.auth.decorators import login_required
 
-from .forms import SignUpForm
+from .forms import SignUpForm, UserProfileForm
 
 def signup(request):
     if request.user.is_authenticated:
@@ -24,6 +25,30 @@ def signup(request):
     else:
         form = SignUpForm()
     return render(request, "accounts/signup.html", {
+        "form": form
+    })
+
+
+@login_required()
+def profile(request):
+    if request.method == "POST":
+        form = UserProfileForm(request.POST, request.FILES, instance=request.user.profile, initial={
+            "username": request.user.username
+        })
+        if form.is_valid():
+            profile = form.save(commit=False)
+            profile.avatar = profile.avatar or "accounts/avatars/default_avatar.png"
+            profile.save()
+            email = form.cleaned_data.get("email")
+            request.user.email = email
+            request.user.save()
+            return redirect("accounts:profile")
+    else:
+        form = UserProfileForm(instance=request.user.profile, initial={
+            "username": request.user.username,
+            "email": request.user.email
+        })
+    return render(request, "accounts/profile.html", {
         "form": form
     })
 
