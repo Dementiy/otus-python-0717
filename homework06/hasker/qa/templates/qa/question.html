@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% load staticfiles %}
+
+{% block content %}
+<div class="ui black segment">
+    <div class="ui items">
+        <div class="item">
+            <div class="ui tiny image">
+                <img src="{{ question.author.profile.avatar.url }}">
+            </div>
+            <div class="content">
+                <div class="header">
+                    <h2>{{ question.title }}</h2>
+                </div>
+                <div class="description">
+                    {{ question.text }}
+                </div>
+                <div class="extra">
+                    <p>Asked by {{ question.author.username }} | {{ question.created_at|timesince }} ago</p>
+
+                    <!-- Votes -->
+                    {% if user.is_authenticated and user != question.author %}
+                        <a onClick="questionVoteDown({{ question.id }});"><i class="arrow red down icon"></i></a>
+                        <i id="question_vote" class="ui label">{{ question.votes }}</i>
+                        <a onClick="questionVoteUp({{ question.id }});"><i class="arrow teal up icon"></i></a>
+                    {% else %}
+                        <i id="question_vote" class="ui label">Votes: {{ question.votes }}</i>
+                    {% endif %}
+
+                    <!-- Tags -->
+                    {% for tag in question.tags.all %}
+                        <a href="{% url 'qa:search' %}?q=tag:{{ tag.name }}" class="ui blue label">{{ tag.name }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="ui divided items">
+{% for answer in answers %}
+    <div class="item">
+        <div class="ui tiny image">
+            <img src="{{ answer.author.profile.avatar.url }}">
+        </div>
+        <div class="content">
+            <p>{{ answer.text }}</p>
+            <div class="extra">
+                <p>Answered by {{ answer.author.username }} | {{ answer.created_at|timesince }} ago</p>
+                <!-- User can't vote for own answer -->
+                {% if user.is_authenticated and user != answer.author %}
+                    <a onClick="answerVoteDown({{ answer.id }});"><i class="arrow red down icon"></i></a>
+                    <i id="answer_vote{{ answer.id }}" class="ui label">{{ answer.votes }}</i>
+                    <a onClick="answerVoteUp({{ answer.id }});"><i class="arrow teal up icon"></i></a>
+                {% else %}
+                    <i class="ui label">Votes: {{ answer.votes }}</i>
+                {% endif %}
+
+                <!-- Only author of question can mark answer -->
+                {% if user == question.author %}
+                    {% if answer.answer %}
+                        <a id="answer{{ answer.id }}" onClick="mark({{ answer.id }});" class="ui right floated green label">
+                    {% else %}
+                        <a id="answer{{ answer.id }}" onClick="mark({{ answer.id }});" class="ui right floated grey label">
+                    {% endif %}
+                    <i class="checkmark icon"></i>mark</a>
+                {% else %}
+                    {% if answer.answer %}
+                        <i class="ui right floated green label"><i class="checkmark icon"></i></i>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+{% if answers.has_other_pages %}
+<div class="ui center aligned grid" style="margin-bottom: 5px;">
+<div class="ui pagination menu">
+    {% if answers.has_previous %}
+        <a class="item" href="?page={{ answers.previous_page_number }}">&laquo;</a>
+    {% endif %}
+
+    {% for i in answers.paginator.page_range %}
+        {% if answers.number == i %}
+            <a class="active item">{{ i }}</a>
+        {% else %}
+            <a href="?page={{ i }}" class="item">{{ i }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if answers.has_next %}
+        <a class="item" href="?page={{ answers.next_page_number }}">&raquo;</a>
+    {% endif %}
+</div>
+</div>
+{% endif %}
+
+{% if user.is_authenticated %}
+    <div class="ui divider"></div>
+    <h3>Your answer:</h3>
+    <form class="ui form" method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <input class="ui primary button" type="submit" value="Answer" />
+    </form>
+{% endif %}
+{% endblock %}
+
+{% block javascript %}
+<script src="{% static 'js/main.js' %}"></script>
+<script src="{% static 'js/qa.js' %}"></script>
+{% endblock %}
