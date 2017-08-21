@@ -1,6 +1,7 @@
 from .base import import *
 
 DEBUG = False
+ALLOWED_HOSTS = ['*']
 
 EMAIL_HOST = config('EMAIL_HOST')
 EMAIL_PORT = config('EMAIL_PORT', cast=int)
@@ -16,5 +17,12 @@ DATABASES = {
         'NAME': config('DB_NAME'),
         'USER': config('DB_USER'),
         'PASSWORD': config('DB_PASSWORD'),
+        'HOST': 'localhost',
+        'PORT': '',
     }
 }
+
+STATIC_URL = '/static/'
+STATIC_ROOT = '/var/www/static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = '/var/www/media/'
