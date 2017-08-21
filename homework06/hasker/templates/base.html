@@ -1,0 +1,68 @@
+{% load staticfiles %}
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Hasker</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/semantic-ui/2.2.10/semantic.min.css">
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/semantic-ui/2.2.10/semantic.min.js"></script>
+    {% block extra_head %}{% endblock %}
+  </head>
+
+  <body>
+	<div class="ui menu">
+        <a href="/" class="item">
+            Hasker
+        </a>
+        <div class="right menu">
+            <div class="item">
+                <div class="ui icon input">
+                    <form method="get" action="{% url 'qa:search' %}">
+                        <input type="text" name="q" placeholder="Search...">
+                        <i class="search link icon"></i>
+                    </form>
+                </div>
+            </div>
+            {% if user.is_authenticated %}
+                <a href="{% url 'qa:ask' %}" class="item">
+                    Ask Question!
+                </a>
+                <div class="item">
+                    <img class="ui mini image" style="margin-right: 10px;" src="{{ user.profile.avatar.url }}">
+                    <a href="{% url 'accounts:profile' %}">{{ user.username }}</a>
+                </div>
+                <a href="{% url 'accounts:logout' %}" class="item">
+                    <div class="ui primary button">Logout</div>
+                </a>
+            {% else %}
+                <a href="{% url 'accounts:signup' %}" class="item">
+			        <div class="ui primary button">Sign up</div>
+		        </a>
+                <a href="{% url 'accounts:login' %}" class="item">
+			        <div class="ui button">Log-in</div>
+		        </a>
+            {% endif %}
+        </div>
+	</div>
+    <div class="ui two column centered grid">
+        <div class="eight wide column">
+            <div class="column">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+        <div class="two wide column">
+            <div class="ui relaxed divided list">
+                <h3>Trending</h3>
+                {% for question in trending %}
+                <div class="item">
+                    <i class="ui label">{{ question.votes }}</i>
+                    <a href="{{ question.get_absolute_url }}">{{ question.title }}</a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% block javascript %}{% endblock %}
+  </body>
+</html>

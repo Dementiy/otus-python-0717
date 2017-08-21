@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="questions" class="ui divided items">
+{% for question in questions %}
+    <div class="item">
+        <div class="content">
+            <a href="{% url 'qa:question' question.slug %}" class="header">{{ question.title }}</a>
+            <div class="meta">
+                asked by {{ question.author.username }} | {{ question.created_at|timesince }} ago
+            </div>
+            <div class="description">
+                <p>{{ question.text|truncatechars:200 }}</p>
+            </div>
+            <div class="extra">
+                <div class="ui label">Votes<div class="detail">{{ question.votes }}</div></div>
+                {% if question.answered %}
+                    <div class="ui green label">
+                {% else %}
+                    <div class="ui label">
+                {% endif %}
+                Answers<div class="detail">{{ question.answers.count }}</div></div>
+                {% for tag in question.tags.all %}
+                    <a href="{% url 'qa:search' %}?q=tag:{{ tag.name }}" class="ui blue label">{{ tag.name }}</a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% endfor %}
+</div>
+
+{% if is_paginated %}
+<div class="ui pagination menu">
+    {% if page_obj.has_previous %}
+    <a class="item" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">&laquo;</a>
+    {% endif %}
+
+    {% for i in paginator.page_range %}
+        {% if page_obj.number == i %}
+            <a class="active item">{{ i }}</a>
+        {% else %}
+            <a href="?page={{ i }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" class="item">{{ i }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+        <a class="item" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">&raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
