@@ -13,6 +13,10 @@ class TagWidget(forms.TextInput):
 class QuestionForm(forms.ModelForm):
     tags = forms.CharField(required=False, widget=TagWidget)
 
+    def clean_tags(self):
+        tags = self.cleaned_data.get('tags')
+        return [] if not tags else tags.split(',')
+
     class Meta:
         model = Question
         fields = ("title", "text", "tags",)
