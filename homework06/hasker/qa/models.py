@@ -61,9 +61,18 @@ class Question(VotableMixin, TimestampedModel):
     tags = models.ManyToManyField(Tag, related_name='questions')
     objects = QuestionManager()
 
+    def _get_unique_slug(self):
+        slug = orig = slugify(self.title)
+        n = 1
+        max_length = self._meta.get_field('slug').max_length
+        while Question.objects.filter(slug=slug).exists():
+            slug = "%s-%d" % (orig[:max_length - len(str(n)) - 1], n)
+            n += 1
+        return slug
+
     def save(self, *args, **kwargs):
         if not self.id:
-            self.slug = slugify(self.title)
+            self.slug = self._get_unique_slug()
         super(Question, self).save(*args, **kwargs)
 
     def get_absolute_url(self):
