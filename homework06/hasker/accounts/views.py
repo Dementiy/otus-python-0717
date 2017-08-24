@@ -4,9 +4,12 @@ from __future__ import unicode_literals
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
 
 from .forms import SignUpForm, UserProfileForm
 
+
+@require_http_methods(["GET", "POST"])
 def signup(request):
     if request.user.is_authenticated:
         return redirect("qa:index")
@@ -30,6 +33,7 @@ def signup(request):
 
 
 @login_required()
+@require_http_methods(["GET", "POST"])
 def profile(request):
     if request.method == "POST":
         form = UserProfileForm(request.POST, request.FILES, instance=request.user.profile, initial={
