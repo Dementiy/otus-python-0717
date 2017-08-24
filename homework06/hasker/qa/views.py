@@ -24,6 +24,13 @@ class IndexView(ListView):
     context_object_name = 'questions'
     paginate_by = 5
 
+    def get_queryset(self):
+        order = self.request.GET.get('order')
+        queryset = Question.objects.all()
+        if order:
+            queryset = queryset.order_by('-votes')
+        return queryset
+
 
 class SearchView(IndexView):
 
