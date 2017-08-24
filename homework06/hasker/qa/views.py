@@ -10,6 +10,7 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
@@ -22,6 +23,13 @@ class IndexView(ListView):
     template_name = 'qa/index.html'
     context_object_name = 'questions'
     paginate_by = 5
+
+    def get_queryset(self):
+        order = self.request.GET.get('order')
+        queryset = Question.objects.all()
+        if order:
+            queryset = queryset.order_by('-votes')
+        return queryset
 
 
 class SearchView(IndexView):
@@ -45,6 +53,7 @@ class SearchView(IndexView):
 
 
 @login_required()
+@require_http_methods(["GET", "POST"])
 def ask(request):
     form = QuestionForm(request.POST or None)
     if form.is_valid():
