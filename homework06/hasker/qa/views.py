@@ -28,14 +28,14 @@ class IndexView(ListView):
         order = self.request.GET.get('order')
         queryset = Question.objects.all()
         if order:
-            queryset = queryset.order_by('-votes')
+            queryset = queryset.order_by('-total_votes')
         return queryset
 
 
 class SearchView(IndexView):
 
     def get_queryset(self):
-        queryset = Question.objects.order_by('-votes', '-created_at')
+        queryset = Question.objects.order_by('-total_votes', '-created_at')
         query = self.request.GET.get('q')
         if not query:
             return Question.objects.none()
@@ -80,7 +80,7 @@ class QuestionView(DetailView):
     def get_context_data(self, **kwargs):
         context_data = super(QuestionView, self).get_context_data(**kwargs)
         question = self.get_object()
-        answers = question.answers.order_by('-votes', '-created_at')
+        answers = question.answers.order_by('-total_votes', '-created_at')
 
         paginator = Paginator(answers, 5)
         page = self.request.GET.get('page')
@@ -126,7 +126,7 @@ class JsonVote(LoginRequiredMixin, BaseDetailView):
         obj = self.get_object()
         obj.vote(request.user, value)
         return JsonResponse({
-            "votes": obj.votes
+            "votes": obj.total_votes
         })
 
 

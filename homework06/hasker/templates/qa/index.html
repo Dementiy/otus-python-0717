@@ -11,7 +11,7 @@
     </a>
 </div>
 </div>
-{{ request.GET.order }}
+
 <div id="questions" class="ui divided items">
 {% for question in questions %}
     <div class="item">
@@ -24,7 +24,7 @@
                 <p>{{ question.text|truncatechars:200 }}</p>
             </div>
             <div class="extra">
-                <div class="ui label">Votes<div class="detail">{{ question.votes }}</div></div>
+                <div class="ui label">Votes<div class="detail">{{ question.total_votes }}</div></div>
                 {% if question.answered %}
                     <div class="ui green label">
                 {% else %}

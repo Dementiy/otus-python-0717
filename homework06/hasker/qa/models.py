@@ -8,6 +8,9 @@ from django.utils.encoding import python_2_unicode_compatible
 from django.shortcuts import reverse
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.mail import send_mail
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 
 
 class TimestampedModel(models.Model):
@@ -38,15 +41,15 @@ class VotableMixin(object):
     def vote(self, user, value):
         if user == self.author:
             return None
-        vote, created = self.get_vote_object(user)
+        vote, created = self.votes.get_or_create(user=user)
         if created:
             vote.value = True if value > 0 else False
             vote.save()
-            self.votes += value
+            self.total_votes += value
             self.save()
         elif vote.value != (True if value > 0 else False):
             vote.delete()
-            self.votes += value
+            self.total_votes += value
             self.save()
 
 
@@ -56,7 +59,8 @@ class Question(VotableMixin, TimestampedModel):
     title = models.CharField(max_length=254)
     text = models.TextField()
     author = models.ForeignKey(User, related_name="questions", on_delete=models.CASCADE)
-    votes = models.IntegerField(default=0)
+    votes = GenericRelation('Vote', related_name='questions')
+    total_votes = models.IntegerField(default=0)
     answered = models.BooleanField(default=False)
     tags = models.ManyToManyField(Tag, related_name='questions')
     objects = QuestionManager()
@@ -80,9 +84,6 @@ class Question(VotableMixin, TimestampedModel):
             "slug": self.slug,
         })
 
-    def get_vote_object(self, user):
-        return QuestionVote.objects.get_or_create(user=user, question=self)
-
     def notify_author(self, request):
         subject = "New answer on Hasker"
         message = "You have a new answer for your question '%s'. Check this link: %s"
@@ -101,7 +102,8 @@ class Answer(VotableMixin, TimestampedModel):
     author = models.ForeignKey(User, related_name="answers", on_delete=models.CASCADE)
     question = models.ForeignKey(Question, related_name="answers", on_delete=models.CASCADE)
     answer = models.BooleanField(default=False)
-    votes = models.IntegerField(default=0)
+    votes = GenericRelation('Vote', related_name='answers')
+    total_votes = models.IntegerField(default=0)
 
     def mark(self):
         if self.question.answered and self.answer:
@@ -118,9 +120,6 @@ class Answer(VotableMixin, TimestampedModel):
             return True
         return False
 
-    def get_vote_object(self, user):
-        return AnswerVote.objects.get_or_create(user=user, answer=self)
-
     def __str__(self):
         return self.text
 
@@ -129,14 +128,7 @@ class Vote(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     value = models.BooleanField(default=True)
 
-    class Meta:
-        abstract = True
-
-
-class QuestionVote(Vote):
-    question = models.ForeignKey(Question, on_delete=models.CASCADE)
-
-
-class AnswerVote(Vote):
-    answer = models.ForeignKey(Answer, on_delete=models.CASCADE)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey()
 

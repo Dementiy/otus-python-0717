@@ -22,10 +22,10 @@
                     <!-- Votes -->
                     {% if user.is_authenticated and user != question.author %}
                         <a onClick="questionVoteDown({{ question.id }});"><i class="arrow red down icon"></i></a>
-                        <i id="question_vote" class="ui label">{{ question.votes }}</i>
+                        <i id="question_vote" class="ui label">{{ question.total_votes }}</i>
                         <a onClick="questionVoteUp({{ question.id }});"><i class="arrow teal up icon"></i></a>
                     {% else %}
-                        <i id="question_vote" class="ui label">Votes: {{ question.votes }}</i>
+                        <i id="question_vote" class="ui label">Votes: {{ question.total_votes }}</i>
                     {% endif %}
 
                     <!-- Tags -->
@@ -51,10 +51,10 @@
                 <!-- User can't vote for own answer -->
                 {% if user.is_authenticated and user != answer.author %}
                     <a onClick="answerVoteDown({{ answer.id }});"><i class="arrow red down icon"></i></a>
-                    <i id="answer_vote{{ answer.id }}" class="ui label">{{ answer.votes }}</i>
+                    <i id="answer_vote{{ answer.id }}" class="ui label">{{ answer.total_votes }}</i>
                     <a onClick="answerVoteUp({{ answer.id }});"><i class="arrow teal up icon"></i></a>
                 {% else %}
-                    <i class="ui label">Votes: {{ answer.votes }}</i>
+                    <i class="ui label">Votes: {{ answer.total_votes }}</i>
                 {% endif %}
 
                 <!-- Only author of question can mark answer -->
