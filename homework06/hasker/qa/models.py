@@ -6,11 +6,11 @@ from django.contrib.auth.models import User
 from django.utils.text import slugify
 from django.utils.encoding import python_2_unicode_compatible
 from django.shortcuts import reverse
-from django.contrib.sites.shortcuts import get_current_site
-from django.core.mail import send_mail
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericRelation
+
+from .utils import notify_user_by_email
 
 
 class TimestampedModel(models.Model):
@@ -85,12 +85,7 @@ class Question(VotableMixin, TimestampedModel):
         })
 
     def notify_author(self, request):
-        subject = "New answer on Hasker"
-        message = "You have a new answer for your question '%s'. Check this link: %s"
-        current_site = get_current_site(request)
-        url = "http://{domain}{path}".format(domain=current_site.domain, path=self.get_absolute_url())
-        message = message % (self.title, url)
-        send_mail(subject, message, None, [self.author.email])
+        notify_user_by_email(self, request)
 
     def __str__(self):
         return self.title
