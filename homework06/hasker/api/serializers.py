@@ -28,6 +28,21 @@ class QuestionSerializer(serializers.ModelSerializer):
         read_only_fields = ("author", "total_votes", "answered")
 
 
+class VoteSerializer(serializers.Serializer):
+    value = serializers.IntegerField()
+
+    def validate(self, data):
+        content_object = self.context.get("content_object")
+        author = self.context.get("user")
+        value = data.get("value")
+        vote = content_object.vote(author, value)
+        if vote is None:
+            raise serializers.ValidationError("You can't vote twice or for yourself.")
+        return {
+            "value": value
+        }
+
+
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=255, write_only=True)
     password = serializers.CharField(max_length=128, min_length=8, write_only=True)
