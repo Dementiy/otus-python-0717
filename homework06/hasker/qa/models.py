@@ -47,10 +47,13 @@ class VotableMixin(object):
             vote.save()
             self.total_votes += value
             self.save()
+            return vote
         elif vote.value != (True if value > 0 else False):
             vote.delete()
             self.total_votes += value
             self.save()
+            return vote
+        return None
 
 
 @python_2_unicode_compatible
