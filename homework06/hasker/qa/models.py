@@ -9,6 +9,7 @@ from django.shortcuts import reverse
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericRelation
+from django.db import transaction
 
 from .utils import notify_user_by_email
 
@@ -38,6 +39,7 @@ class QuestionManager(models.Manager):
 
 class VotableMixin(object):
 
+    @transaction.atomic
     def vote(self, user, value):
         if user == self.author:
             return None
@@ -106,6 +108,7 @@ class Answer(VotableMixin, TimestampedModel):
     votes = GenericRelation('Vote', related_name='answers')
     total_votes = models.IntegerField(default=0)
 
+    @transaction.atomic
     def mark(self):
         if self.question.answered and self.answer:
             self.question.answered = False

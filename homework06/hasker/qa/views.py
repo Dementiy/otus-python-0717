@@ -13,6 +13,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db import transaction
 
 from .models import Question, Answer, Tag
 from .forms import QuestionForm, AnswerForm
@@ -60,7 +61,8 @@ def ask(request):
         question = form.save(commit=False)
         question.author = request.user
         tags_list = form.cleaned_data['tags']
-        question.save(tags=tags_list)
+	with transaction.atomic():
+            question.save(tags=tags_list)
         return redirect(reverse("qa:question", kwargs={
             "slug": question.slug
         }))
