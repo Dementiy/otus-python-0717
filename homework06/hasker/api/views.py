@@ -88,19 +88,3 @@ class AnswerVoteAPIView(VoteAPIView):
     """ Проголосовать за ответ """
     content_object_class = Answer
 
-
-"""
-class AnswerVoteAPIView(views.APIView):
-
-    def post(self, request, pk):
-        value = int(request.data.get("value"))
-        try:
-            answer = Answer.objects.get(id=pk)
-        except Answer.DoesNotExist:
-            raise NotFound("Answer with this ID does not exist.")
-        answer.vote(user=request.user, value=value)
-        return Response({
-            "total_votes":answer.total_votes
-        }, status=status.HTTP_201_CREATED)
-"""
-
