@@ -8,16 +8,20 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 
-from .serializers import QuestionSerializer, AnswerSerializer, LoginSerializer
+from .serializers import (
+    QuestionSerializer, AnswerSerializer, LoginSerializer, VoteSerializer
+)
 from qa.models import Question, Answer
 
 
 class TrendingAPIView(generics.ListAPIView):
+    """ Получить список популярных вопросов """
     queryset = Question.objects.trending()
     serializer_class = QuestionSerializer
 
 
 class AnswersAPIView(generics.ListCreateAPIView):
+    """ Просмотреть список ответов или добавить новый """
     serializer_class = AnswerSerializer
     permission_classes = (IsAuthenticatedOrReadOnly,)
 
@@ -39,6 +43,7 @@ class AnswersAPIView(generics.ListCreateAPIView):
 
 
 class LoginAPIView(views.APIView):
+    """ Авторизация пользователя по логину и паролю """
     serializer_class = LoginSerializer
 
     def post(self, request):
@@ -51,4 +56,35 @@ class LoginAPIView(views.APIView):
         serializer = self.serializer_class(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class VoteAPIView(views.APIView):
+    serializer_class = VoteSerializer
+
+    def post(self, request, pk):
+        try:
+            content_object = self.content_object_class.objects.get(id=pk)
+        except self.content_object_class.DoesNotExist:
+            raise NotFound("Object with this ID does not exist.")
+        data = {
+            'value': request.data.get("value")
+        }
+        serializer = self.serializer_class(data=data, context={
+            'user': request.user,
+            'content_object': content_object
+        })
+        serializer.is_valid(raise_exception=True)
+        return Response({
+            "total_votes": content_object.total_votes
+        }, status=status.HTTP_201_CREATED)
+
+
+class QuestionVoteAPIView(VoteAPIView):
+    """ Проголосовать за вопрос """
+    content_object_class = Question
+
+
+class AnswerVoteAPIView(VoteAPIView):
+    """ Проголосовать за ответ """
+    content_object_class = Answer
 

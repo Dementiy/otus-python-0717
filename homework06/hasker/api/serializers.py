@@ -5,18 +5,42 @@ from qa.models import Question, Answer
 
 
 class AnswerSerializer(serializers.ModelSerializer):
+    author = serializers.ReadOnlyField(source="author.username")
+    question = serializers.ReadOnlyField(source="question.title")
 
     class Meta:
         model = Answer
-        fields = "__all__"
-        read_only_fields = ("author", "question", "answer", "votes",)
+        fields = ("text", "author", "question", "answer", "total_votes")
+        read_only_fields = ("author", "question", "answer", "total_votes")
 
 
 class QuestionSerializer(serializers.ModelSerializer):
+    author = serializers.ReadOnlyField(source="author.username")
+    tags = serializers.SlugRelatedField(
+        many=True,
+        read_only=True,
+        slug_field="name"
+    )
 
     class Meta:
         model = Question
-        fields = "__all__"
+        fields = ("title", "text", "author", "total_votes", "answered", "tags")
+        read_only_fields = ("author", "total_votes", "answered")
+
+
+class VoteSerializer(serializers.Serializer):
+    value = serializers.IntegerField()
+
+    def validate(self, data):
+        content_object = self.context.get("content_object")
+        author = self.context.get("user")
+        value = data.get("value")
+        vote = content_object.vote(author, value)
+        if vote is None:
+            raise serializers.ValidationError("You can't vote twice or for yourself.")
+        return {
+            "value": value
+        }
 
 
 class LoginSerializer(serializers.Serializer):

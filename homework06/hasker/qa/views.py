@@ -13,6 +13,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db import transaction
 
 from .models import Question, Answer, Tag
 from .forms import QuestionForm, AnswerForm
@@ -28,14 +29,14 @@ class IndexView(ListView):
         order = self.request.GET.get('order')
         queryset = Question.objects.all()
         if order:
-            queryset = queryset.order_by('-votes')
+            queryset = queryset.order_by('-total_votes')
         return queryset
 
 
 class SearchView(IndexView):
 
     def get_queryset(self):
-        queryset = Question.objects.order_by('-votes', '-created_at')
+        queryset = Question.objects.order_by('-total_votes', '-created_at')
         query = self.request.GET.get('q')
         if not query:
             return Question.objects.none()
@@ -59,11 +60,9 @@ def ask(request):
     if form.is_valid():
         question = form.save(commit=False)
         question.author = request.user
-        question.save()
         tags_list = form.cleaned_data['tags']
-        for tag_name in tags_list:
-            tag, created = Tag.objects.get_or_create(name=tag_name)
-            question.tags.add(tag)
+	with transaction.atomic():
+            question.save(tags=tags_list)
         return redirect(reverse("qa:question", kwargs={
             "slug": question.slug
         }))
@@ -80,7 +79,7 @@ class QuestionView(DetailView):
     def get_context_data(self, **kwargs):
         context_data = super(QuestionView, self).get_context_data(**kwargs)
         question = self.get_object()
-        answers = question.answers.order_by('-votes', '-created_at')
+        answers = question.answers.order_by('-total_votes', '-created_at')
 
         paginator = Paginator(answers, 5)
         page = self.request.GET.get('page')
@@ -126,7 +125,7 @@ class JsonVote(LoginRequiredMixin, BaseDetailView):
         obj = self.get_object()
         obj.vote(request.user, value)
         return JsonResponse({
-            "votes": obj.votes
+            "votes": obj.total_votes
         })
 
 

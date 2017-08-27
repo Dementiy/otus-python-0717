@@ -56,7 +56,7 @@
                 <h3>Trending</h3>
                 {% for question in trending %}
                 <div class="item">
-                    <i class="ui label">{{ question.votes }}</i>
+                    <i class="ui label">{{ question.total_votes }}</i>
                     <a href="{{ question.get_absolute_url }}">{{ question.title }}</a>
                 </div>
                 {% endfor %}
