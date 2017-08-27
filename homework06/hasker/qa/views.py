@@ -62,7 +62,7 @@ def ask(request):
         question.author = request.user
         tags_list = form.cleaned_data['tags']
 	with transaction.atomic():
-            question.save(tags=tags_list)
+            question.save(tags_list=tags_list)
         return redirect(reverse("qa:question", kwargs={
             "slug": question.slug
         }))
