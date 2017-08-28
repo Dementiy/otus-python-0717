@@ -87,7 +87,7 @@ class Question(VotableMixin, TimestampedModel):
         for tag_name in tags_list:
             tag, created = Tag.objects.get_or_create(name=tag_name)
             tags.append(tag)
-        self.tags.add(tags)
+        self.tags.add(*tags)
 
     def get_absolute_url(self):
         return reverse("qa:question", kwargs={
