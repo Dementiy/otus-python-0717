@@ -79,13 +79,15 @@ class Question(VotableMixin, TimestampedModel):
             n += 1
         return slug
 
-    def save(self, tags=[], *args, **kwargs):
+    def save(self, tags_list=[], *args, **kwargs):
         if not self.id:
             self.slug = self._get_unique_slug()
         super(Question, self).save(*args, **kwargs)
-        for tag_name in tags:
+        tags = []
+        for tag_name in tags_list:
             tag, created = Tag.objects.get_or_create(name=tag_name)
-            self.tags.add(tag)
+            tags.append(tag)
+        self.tags.add(*tags)
 
     def get_absolute_url(self):
         return reverse("qa:question", kwargs={
