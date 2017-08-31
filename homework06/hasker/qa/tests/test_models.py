@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
-from .models import Question, Answer
+from qa.models import Question, Answer
 
 
 class QuestionModelTest(TestCase):
@@ -38,14 +38,16 @@ class QuestionModelTest(TestCase):
         question.full_clean()
         self.assertEqual(question, Question.objects.first())
 
-    def test_questions_with_the_same_title_have_a_different_slugs(self):
+    def test_questions_with_the_same_title_have_a_different_urls(self):
         question1 = Question.objects.create(
             title='To be or not to be?',
             author=self.user)
         question2 = Question.objects.create(
             title='To be or not to be?',
             author=self.user)
-        self.assertNotEqual(question1.slug, question2.slug)
+        self.assertNotEqual(
+            question1.get_absolute_url(),
+            question2.get_absolute_url())
 
     def test_author_cannot_vote_for_own_question(self):
         question = Question.objects.create(
@@ -76,6 +78,30 @@ class QuestionModelTest(TestCase):
         question.vote(self.other_user, -1)
         total_votes_new = question.total_votes
         self.assertNotEqual(total_votes_old, total_votes_new)
+
+    def test_trending_questions_ordering_by_created_at(self):
+        question1 = Question.objects.create(
+            title='Question 1', author=self.user)
+        question2 = Question.objects.create(
+            title='Question 2', author=self.user)
+        question3 = Question.objects.create(
+            title='Question 3', author=self.user)
+        self.assertEqual(
+            list(Question.objects.trending()),
+            [question3, question2, question1]
+        )
+
+    def test_trending_questions_ordering_by_total_votes(self):
+        question1 = Question.objects.create(
+            title='Question 1', total_votes=2, author=self.user)
+        question2 = Question.objects.create(
+            title='Question 2', total_votes=1, author=self.user)
+        question3 = Question.objects.create(
+            title='Question 3', total_votes=3, author=self.user)
+        self.assertEqual(
+            list(Question.objects.trending()),
+            [question3, question1, question2]
+        )
 
 
 class AnswerModelTest(TestCase):

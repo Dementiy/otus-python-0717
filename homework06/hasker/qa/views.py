@@ -40,6 +40,7 @@ class SearchView(IndexView):
         query = self.request.GET.get('q')
         if not query:
             return Question.objects.none()
+        query = query[:255]
         if query.startswith('tag:'):
             queryset = queryset.filter(tags__name=query[4:])
         else:
@@ -64,7 +65,8 @@ def ask(request):
 	with transaction.atomic():
             question.save(tags_list=tags_list)
         return redirect(reverse("qa:question", kwargs={
-            "slug": question.slug
+            "slug": question.slug,
+            "pk": question.pk
         }))
     return render(request, "qa/ask.html", {
         "form": form
@@ -110,7 +112,8 @@ class QuestionView(DetailView):
             answer.save()
             question.notify_author(request)
             return redirect(reverse('qa:question', kwargs={
-                "slug": question.slug
+                "slug": question.slug,
+                "pk": question.pk
             }))
         else:
             # TODO: Add 'form' to context for display errors

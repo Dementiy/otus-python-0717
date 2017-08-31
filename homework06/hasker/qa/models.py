@@ -34,7 +34,7 @@ class Tag(models.Model):
 class QuestionManager(models.Manager):
 
     def trending(self):
-        return self.order_by('-votes', '-created_at')[:5]
+        return self.order_by('-total_votes', '-created_at')[:5]
 
 
 class VotableMixin(object):
@@ -70,18 +70,9 @@ class Question(VotableMixin, TimestampedModel):
     tags = models.ManyToManyField(Tag, related_name='questions')
     objects = QuestionManager()
 
-    def _get_unique_slug(self):
-        slug = orig = slugify(self.title)
-        n = 1
-        max_length = self._meta.get_field('slug').max_length
-        while Question.objects.filter(slug=slug).exists():
-            slug = "%s-%d" % (orig[:max_length - len(str(n)) - 1], n)
-            n += 1
-        return slug
-
     def save(self, tags_list=[], *args, **kwargs):
         if not self.id:
-            self.slug = self._get_unique_slug()
+            self.slug = slugify(self.title)
         super(Question, self).save(*args, **kwargs)
         tags = []
         for tag_name in tags_list:
@@ -92,6 +83,7 @@ class Question(VotableMixin, TimestampedModel):
     def get_absolute_url(self):
         return reverse("qa:question", kwargs={
             "slug": self.slug,
+            "pk": self.pk,
         })
 
     def notify_author(self, request):
