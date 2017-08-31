@@ -79,6 +79,30 @@ class QuestionModelTest(TestCase):
         total_votes_new = question.total_votes
         self.assertNotEqual(total_votes_old, total_votes_new)
 
+    def test_trending_questions_ordering_by_created_at(self):
+        question1 = Question.objects.create(
+            title='Question 1', author=self.user)
+        question2 = Question.objects.create(
+            title='Question 2', author=self.user)
+        question3 = Question.objects.create(
+            title='Question 3', author=self.user)
+        self.assertEqual(
+            list(Question.objects.trending()),
+            [question3, question2, question1]
+        )
+
+    def test_trending_questions_ordering_by_total_votes(self):
+        question1 = Question.objects.create(
+            title='Question 1', total_votes=2, author=self.user)
+        question2 = Question.objects.create(
+            title='Question 2', total_votes=1, author=self.user)
+        question3 = Question.objects.create(
+            title='Question 3', total_votes=3, author=self.user)
+        self.assertEqual(
+            list(Question.objects.trending()),
+            [question3, question1, question2]
+        )
+
 
 class AnswerModelTest(TestCase):
 
