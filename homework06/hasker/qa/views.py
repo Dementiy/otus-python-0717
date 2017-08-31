@@ -40,6 +40,7 @@ class SearchView(IndexView):
         query = self.request.GET.get('q')
         if not query:
             return Question.objects.none()
+        query = query[:255]
         if query.startswith('tag:'):
             queryset = queryset.filter(tags__name=query[4:])
         else:
