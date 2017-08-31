@@ -6,7 +6,7 @@ from .views import (
 
 urlpatterns = [
     url(r'^$', IndexView.as_view(), name='index'),
-    url(r'^question/(?P<slug>[-\w]+)/?$', QuestionView.as_view(), name='question'),
+    url(r'^question/(?P<slug>[-\w\d]+),(?P<pk>\d+)/?$', QuestionView.as_view(), name='question'),
     url(r'^question/(?P<pk>[0-9]+)/vote/?$', JsonQuestionVote.as_view(), name='question_vote'),
     url(r'^answer/(?P<pk>[0-9]+)/vote/?$', JsonAnswerVote.as_view(), name='answer_vote'),
     url(r'^answer/(?P<pk>[0-9]+)/mark/?$', JsonAnswerMark.as_view(), name='answer_mark'),

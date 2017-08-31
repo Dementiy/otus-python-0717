@@ -16,7 +16,7 @@
 {% for question in questions %}
     <div class="item">
         <div class="content">
-            <a href="{% url 'qa:question' question.slug %}" class="header">{{ question.title }}</a>
+            <a href="{{ question.get_absolute_url }}" class="header">{{ question.title }}</a>
             <div class="meta">
                 asked by {{ question.author.username }} | {{ question.created_at|timesince }} ago
             </div>
