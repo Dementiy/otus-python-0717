@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
-from .models import Question, Answer
+from qa.models import Question, Answer
 
 
 class QuestionModelTest(TestCase):
@@ -38,14 +38,16 @@ class QuestionModelTest(TestCase):
         question.full_clean()
         self.assertEqual(question, Question.objects.first())
 
-    def test_questions_with_the_same_title_have_a_different_slugs(self):
+    def test_questions_with_the_same_title_have_a_different_urls(self):
         question1 = Question.objects.create(
             title='To be or not to be?',
             author=self.user)
         question2 = Question.objects.create(
             title='To be or not to be?',
             author=self.user)
-        self.assertNotEqual(question1.slug, question2.slug)
+        self.assertNotEqual(
+            question1.get_absolute_url(),
+            question2.get_absolute_url())
 
     def test_author_cannot_vote_for_own_question(self):
         question = Question.objects.create(
