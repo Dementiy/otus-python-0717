@@ -34,7 +34,7 @@ class Tag(models.Model):
 class QuestionManager(models.Manager):
 
     def trending(self):
-        return self.order_by('-votes', '-created_at')[:5]
+        return self.order_by('-total_votes', '-created_at')[:5]
 
 
 class VotableMixin(object):
