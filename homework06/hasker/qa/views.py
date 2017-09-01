@@ -16,7 +16,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db import transaction
 
 from .models import Question, Answer, Tag
-from .forms import QuestionForm, AnswerForm
+from .forms import QuestionForm, AnswerForm, SearchForm
 
 
 class IndexView(ListView):
@@ -36,21 +36,19 @@ class IndexView(ListView):
 class SearchView(IndexView):
 
     def get_queryset(self):
-        queryset = Question.objects.order_by('-total_votes', '-created_at')
-        query = self.request.GET.get('q')
-        if not query:
-            return Question.objects.none()
-        query = query[:255]
-        if query.startswith('tag:'):
-            queryset = queryset.filter(tags__name=query[4:])
-        else:
-            query_list = query.split()
-            queryset = queryset.filter(
-                reduce(operator.and_,
-                    (Q(title__icontains=q) for q in query_list)) |
-                reduce(operator.and_,
-                    (Q(text__icontains=q) for q in query_list))
-            )
+        q = self.request.GET.get('q')
+        queryset = Question.objects.none()
+        if not q:
+            return queryset
+        form = SearchForm(self.request.GET)
+        if form.is_valid():
+            query = form.cleaned_data['q']
+            if query.startswith('tag:'):
+                query_list = query[4:].split(',')
+                queryset = Question.objects.search_by_tags(query_list)
+            else:
+                query_list = query.split()
+                queryset = Question.objects.search(query_list)
         return queryset
 
 

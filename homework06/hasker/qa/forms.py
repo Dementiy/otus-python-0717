@@ -29,3 +29,7 @@ class AnswerForm(forms.ModelForm):
         model = Answer
         fields = ("text",)
 
+
+class SearchForm(forms.Form):
+    q = forms.CharField(max_length=254)
+
