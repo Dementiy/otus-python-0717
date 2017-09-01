@@ -15,7 +15,10 @@ class QuestionForm(forms.ModelForm):
 
     def clean_tags(self):
         tags = self.cleaned_data.get('tags')
-        return [] if not tags else tags.split(',')
+        if not tags:
+            return []
+        else:
+            return list(set(tags.split(',')))[:3]
 
     class Meta:
         model = Question
