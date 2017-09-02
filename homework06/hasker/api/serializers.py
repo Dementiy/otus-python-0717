@@ -28,6 +28,10 @@ class QuestionSerializer(serializers.ModelSerializer):
         read_only_fields = ("author", "total_votes", "answered")
 
 
+class SearchFieldsSerializer(serializers.Serializer):
+    q = serializers.CharField(max_length=254)
+
+
 class VoteSerializer(serializers.Serializer):
     value = serializers.IntegerField()
 

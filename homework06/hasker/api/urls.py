@@ -2,7 +2,7 @@ from django.conf.urls import url, include
 from rest_framework.urlpatterns import format_suffix_patterns
 
 from .views import (
-    TrendingAPIView, AnswersAPIView, LoginAPIView,
+    TrendingAPIView, SearchAPIView, AnswersAPIView, LoginAPIView,
     QuestionVoteAPIView, AnswerVoteAPIView,
 )
 
@@ -10,6 +10,9 @@ urlpatterns = [
     url(regex=r"^trending/$",
         view=TrendingAPIView.as_view(),
         name="trending"),
+    url(regex=r'^search/?$',
+        view=SearchAPIView.as_view(),
+        name="search"),
     url(regex=r"^question/(?P<pk>[0-9]+)/answers/$",
         view=AnswersAPIView.as_view(),
         name="answers"),

@@ -9,7 +9,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 
 from .serializers import (
-    QuestionSerializer, AnswerSerializer, LoginSerializer, VoteSerializer
+    QuestionSerializer, AnswerSerializer, SearchFieldsSerializer,
+    LoginSerializer, VoteSerializer
 )
 from qa.models import Question, Answer
 
@@ -18,6 +19,26 @@ class TrendingAPIView(generics.ListAPIView):
     """ Получить список популярных вопросов """
     queryset = Question.objects.trending()
     serializer_class = QuestionSerializer
+
+
+class SearchAPIView(generics.ListAPIView):
+    """ Поиск вопросов по заголовку, телу и тегам """
+    serializer_class = QuestionSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        query = SearchFieldsSerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        q = query.data.get('q')
+        queryset = Question.objects.none()
+        if not q:
+            return queryset
+        if q.startswith('tag:'):
+            query_list = q[4:].split(',')
+            queryset = Question.objects.search_by_tags(query_list)
+        else:
+            query_list = q.split()
+            queryset = Question.objects.search(query_list)
+        return queryset
 
 
 class AnswersAPIView(generics.ListCreateAPIView):
