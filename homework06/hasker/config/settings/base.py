@@ -26,6 +26,7 @@ INSTALLED_APPS = [
 
     'django.contrib.postgres',
     'rest_framework',
+    'admin_honeypot',
 
     'accounts',
     'qa',
