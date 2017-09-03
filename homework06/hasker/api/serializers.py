@@ -6,12 +6,11 @@ from qa.models import Question, Answer
 
 class AnswerSerializer(serializers.ModelSerializer):
     author = serializers.ReadOnlyField(source="author.username")
-    question = serializers.ReadOnlyField(source="question.title")
 
     class Meta:
         model = Answer
-        fields = ("text", "author", "question", "answer", "total_votes")
-        read_only_fields = ("author", "question", "answer", "total_votes")
+        fields = ("text", "author", "answer", "total_votes")
+        read_only_fields = ("author", "answer", "total_votes")
 
 
 class QuestionSerializer(serializers.ModelSerializer):
