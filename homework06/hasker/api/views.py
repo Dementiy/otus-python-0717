@@ -12,18 +12,28 @@ from .serializers import (
     QuestionSerializer, AnswerSerializer, SearchFieldsSerializer,
     LoginSerializer, VoteSerializer
 )
+from .paginators import ResultsSetPagination
 from qa.models import Question, Answer
+
+
+class IndexAPIView(generics.ListAPIView):
+    """ Получить список популярных вопросов """
+    queryset = Question.objects.all()
+    serializer_class = QuestionSerializer
+    pagination_class = ResultsSetPagination
 
 
 class TrendingAPIView(generics.ListAPIView):
     """ Получить список популярных вопросов """
     queryset = Question.objects.trending()
     serializer_class = QuestionSerializer
+    pagination_class = ResultsSetPagination
 
 
 class SearchAPIView(generics.ListAPIView):
     """ Поиск вопросов по заголовку, телу и тегам """
     serializer_class = QuestionSerializer
+    pagination_class = ResultsSetPagination
 
     def get_queryset(self, *args, **kwargs):
         query = SearchFieldsSerializer(data=self.request.query_params)
@@ -45,6 +55,7 @@ class AnswersAPIView(generics.ListCreateAPIView):
     """ Просмотреть список ответов или добавить новый """
     serializer_class = AnswerSerializer
     permission_classes = (IsAuthenticatedOrReadOnly,)
+    pagination_class = ResultsSetPagination
 
     def get_queryset(self, *args, **kwargs):
         question_id = self.kwargs.get("pk")
