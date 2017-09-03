@@ -22,12 +22,21 @@ class IndexAPIView(generics.ListAPIView):
     serializer_class = QuestionSerializer
     pagination_class = ResultsSetPagination
 
+    def get_queryset(self):
+        return Question.objects.\
+            select_related('author').\
+            prefetch_related('tags').all()
+
 
 class TrendingAPIView(generics.ListAPIView):
     """ Получить список популярных вопросов """
-    queryset = Question.objects.trending()
     serializer_class = QuestionSerializer
     pagination_class = ResultsSetPagination
+
+    def get_queryset(self):
+        return Question.objects.trending().\
+            select_related('author').\
+            prefetch_related('tags')
 
 
 class SearchAPIView(generics.ListAPIView):
@@ -48,6 +57,9 @@ class SearchAPIView(generics.ListAPIView):
         else:
             query_list = q.split()
             queryset = Question.objects.search(query_list)
+        queryset = queryset.\
+            select_related('author').\
+            prefetch_related('tags')
         return queryset
 
 
@@ -63,7 +75,7 @@ class AnswersAPIView(generics.ListCreateAPIView):
             question = Question.objects.get(id=question_id)
         except Question.DoesNotExist:
             raise NotFound()
-        return question.answers.all()
+        return question.answers.select_related('author').all()
 
     def perform_create(self, serializer):
         question_id = self.kwargs.get("pk")
