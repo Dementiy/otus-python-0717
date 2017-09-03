@@ -27,7 +27,10 @@ class IndexView(ListView):
 
     def get_queryset(self):
         order = self.request.GET.get('order')
-        queryset = Question.objects.all()
+        queryset = Question.objects.\
+            select_related('author').\
+            prefetch_related('answers').\
+            prefetch_related('tags').all()
         if order:
             queryset = queryset.order_by('-total_votes')
         return queryset
@@ -49,6 +52,10 @@ class SearchView(IndexView):
             else:
                 query_list = query.split()
                 queryset = Question.objects.search(query_list)
+            queryset = queryset.\
+                select_related('author').\
+                prefetch_related('answers').\
+                prefetch_related('tags')
         return queryset
 
 
@@ -79,7 +86,10 @@ class QuestionView(DetailView):
     def get_context_data(self, **kwargs):
         context_data = super(QuestionView, self).get_context_data(**kwargs)
         question = self.get_object()
-        answers = question.answers.order_by('-total_votes', '-created_at')
+        answers = question.answers.\
+            select_related('author').\
+            select_related('author__profile').\
+            order_by('-total_votes', '-created_at')
 
         paginator = Paginator(answers, 5)
         page = self.request.GET.get('page')
