@@ -9,21 +9,65 @@ from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
 
 from .serializers import (
-    QuestionSerializer, AnswerSerializer, LoginSerializer, VoteSerializer
+    QuestionSerializer, AnswerSerializer, SearchFieldsSerializer,
+    LoginSerializer, VoteSerializer
 )
+from .paginators import ResultsSetPagination
 from qa.models import Question, Answer
+
+
+class IndexAPIView(generics.ListAPIView):
+    """ Получить список популярных вопросов """
+    queryset = Question.objects.all()
+    serializer_class = QuestionSerializer
+    pagination_class = ResultsSetPagination
+
+    def get_queryset(self):
+        return Question.objects.\
+            select_related('author').\
+            prefetch_related('tags').all()
 
 
 class TrendingAPIView(generics.ListAPIView):
     """ Получить список популярных вопросов """
-    queryset = Question.objects.trending()
     serializer_class = QuestionSerializer
+    pagination_class = ResultsSetPagination
+
+    def get_queryset(self):
+        return Question.objects.trending().\
+            select_related('author').\
+            prefetch_related('tags')
+
+
+class SearchAPIView(generics.ListAPIView):
+    """ Поиск вопросов по заголовку, телу и тегам """
+    serializer_class = QuestionSerializer
+    pagination_class = ResultsSetPagination
+
+    def get_queryset(self, *args, **kwargs):
+        query = SearchFieldsSerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        q = query.data.get('q')
+        queryset = Question.objects.none()
+        if not q:
+            return queryset
+        if q.startswith('tag:'):
+            query_list = q[4:].split(',')
+            queryset = Question.objects.search_by_tags(query_list)
+        else:
+            query_list = q.split()
+            queryset = Question.objects.search(query_list)
+        queryset = queryset.\
+            select_related('author').\
+            prefetch_related('tags')
+        return queryset
 
 
 class AnswersAPIView(generics.ListCreateAPIView):
     """ Просмотреть список ответов или добавить новый """
     serializer_class = AnswerSerializer
     permission_classes = (IsAuthenticatedOrReadOnly,)
+    pagination_class = ResultsSetPagination
 
     def get_queryset(self, *args, **kwargs):
         question_id = self.kwargs.get("pk")
@@ -31,7 +75,7 @@ class AnswersAPIView(generics.ListCreateAPIView):
             question = Question.objects.get(id=question_id)
         except Question.DoesNotExist:
             raise NotFound()
-        return question.answers.all()
+        return question.answers.select_related('author').all()
 
     def perform_create(self, serializer):
         question_id = self.kwargs.get("pk")

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+import operator
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -10,6 +11,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import transaction
+from django.contrib.postgres.search import SearchVector, SearchQuery
 
 from .utils import notify_user_by_email
 
@@ -35,6 +37,18 @@ class QuestionManager(models.Manager):
 
     def trending(self):
         return self.order_by('-total_votes', '-created_at')[:5]
+
+    def search(self, query_list=[]):
+        vectors = SearchVector('title') + SearchVector('text')
+        terms = [SearchQuery(term) for term in query_list]
+        query = reduce(operator.or_, terms)
+        return self.annotate(search=vectors).filter(search=query)
+
+    def search_by_tags(self, tags_list=[]):
+        vectors = SearchVector('tags__name')
+        terms = [SearchQuery(term) for term in tags_list]
+        query = reduce(operator.or_, terms)
+        return self.annotate(search=vectors).filter(search=query)
 
 
 class VotableMixin(object):
