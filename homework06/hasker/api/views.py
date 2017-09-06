@@ -17,7 +17,7 @@ from qa.models import Question, Answer
 
 
 class IndexAPIView(generics.ListAPIView):
-    """ Получить список популярных вопросов """
+    """ Получить список вопросов """
     queryset = Question.objects.all()
     serializer_class = QuestionSerializer
     pagination_class = ResultsSetPagination
