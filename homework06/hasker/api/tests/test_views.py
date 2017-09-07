@@ -69,3 +69,11 @@ class ViewsTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.json()['total_votes'], self.question.total_votes)
 
+    def test_user_can_not_vote_for_own_questions(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(reverse('api:question_vote', kwargs={'pk': self.question.id}),
+            {'value': 1},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
