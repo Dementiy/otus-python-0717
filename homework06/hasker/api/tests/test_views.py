@@ -13,13 +13,13 @@ from qa.models import Question, Answer
 class ViewsTestCase(TestCase):
 
     def setUp(self):
-        user = User.objects.create(username='test', password='verysecret')
-        self.question = Question.objects.create(title='Question 1', total_votes=2, author=user)
-        Question.objects.create(title='Question 2', total_votes=3, author=user)
-        Question.objects.create(title='Question 3', total_votes=1, author=user)
-        Answer.objects.create(text='Answer 1', question=self.question, author=user)
-        Answer.objects.create(text='Answer 2', question=self.question, author=user)
-        Answer.objects.create(text='Answer 3', question=self.question, author=user)
+        self.user = User.objects.create(username='test', password='verysecret')
+        self.question = Question.objects.create(title='Question 1', total_votes=2, author=self.user)
+        Question.objects.create(title='Question 2', total_votes=3, author=self.user)
+        Question.objects.create(title='Question 3', total_votes=1, author=self.user)
+        Answer.objects.create(text='Answer 1', question=self.question, author=self.user)
+        Answer.objects.create(text='Answer 2', question=self.question, author=self.user)
+        Answer.objects.create(text='Answer 3', question=self.question, author=self.user)
         self.client = APIClient()
 
     def test_can_get_a_questions_list(self):
@@ -51,4 +51,21 @@ class ViewsTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()['count'], 1)
         self.assertEqual(response.json()['results'][0]['title'], self.question.title)
+
+    def test_only_authenticate_user_can_vote(self):
+        response = self.client.post(reverse('api:question_vote', kwargs={'pk': self.question.id}),
+            {'value': 1},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        bob = User.objects.create(username='bob', password='verysecret')
+        self.client.force_authenticate(user=bob)
+        response = self.client.post(reverse('api:question_vote', kwargs={'pk': self.question.id}),
+            {'value': 1},
+            format='json'
+        )
+        self.question.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()['total_votes'], self.question.total_votes)
 
