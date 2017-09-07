@@ -104,6 +104,7 @@ class LoginAPIView(views.APIView):
 
 class VoteAPIView(views.APIView):
     serializer_class = VoteSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
 
     def post(self, request, pk):
         try:
