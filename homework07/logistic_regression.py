@@ -96,7 +96,7 @@ class LogisticRegression:
         ###########################################################################
 
         predictions = self.sigmoid(X.dot(self.w.T))
-        y_proba = np.vstack([predictions, 1-predictions]).T
+        y_proba = np.vstack([1-predictions, predictions]).T
 
         ###########################################################################
         #                           END OF YOUR CODE                              #
@@ -121,7 +121,7 @@ class LogisticRegression:
         # Implement this method. Store the predicted labels in y_pred.            #
         ###########################################################################
         y_proba = self.predict_proba(X, append_bias=True)
-        y_pred = np.array([1,0])[y_proba.argmax(axis=1)]
+        y_pred = y_proba.argmax(axis=1)
 
         ###########################################################################
         #                           END OF YOUR CODE                              #
@@ -146,7 +146,7 @@ class LogisticRegression:
 
         # Compute loss and gradient. Your code should not contain python loops.
         h = self.sigmoid(X_batch.dot(self.w))
-        loss = -y_batch.T.dot(np.log(h)) - (1 - y_batch.T).dot(np.log(1.0 - h))
+        loss = -np.dot(y_batch, np.log(h)) - np.dot((1-y_batch), np.log(1.0-h))
         dw = (h - y_batch) * X_batch
 
         # Right now the loss is a sum over all training examples, but we want it
@@ -158,8 +158,8 @@ class LogisticRegression:
 
         # Add regularization to the loss and gradient.
         # Note that you have to exclude bias term in regularization.
-        loss += (reg / (2.0 * num_train)) * (self.w[1:].T.dot(self.w[1:]))
-        dw[1:] = dw[1:] + (reg * self.w[1:]) / num_train
+        loss += (reg / (2.0 * num_train)) * np.dot(self.w[:-1], self.w[:-1])
+        dw[:-1] = dw[:-1] + (reg * self.w[:-1]) / num_train
 
         return loss, dw
 
