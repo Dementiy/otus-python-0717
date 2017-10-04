@@ -13,6 +13,7 @@ import threading
 import Queue
 import multiprocessing
 from functools import partial
+import time
 
 
 NORMAL_ERR_RATE = 0.01
@@ -22,7 +23,8 @@ config = {
     'MEMC_TIMEOUT': 3,
     'MAX_JOB_QUEUE_SIZE': 0,
     'MAX_RESULT_QUEUE_SIZE': 0,
-    'THREADS_PER_WORKER': 4
+    'THREADS_PER_WORKER': 4,
+    'MEMC_BACKOFF_FACTOR': 0.3
 }
 
 
@@ -47,11 +49,15 @@ def insert_appsinstalled(memc_pool, memc_addr, appsinstalled, dry_run=False):
                 memc = memc_pool.get(timeout=0.1)
             except Queue.Empty:
                 memc = memcache.Client([memc_addr], socket_timeout=config['MEMC_TIMEOUT'])
-            for retry in range(config['MEMC_MAX_RETRIES']):
+            ok = False
+            for n in range(config['MEMC_MAX_RETRIES']):
                 ok = memc.set(key, packed)
                 if ok:
-                    memc_pool.put(memc)
-                    return True
+                    break
+                backoff_value = config['MEMC_BACKOFF_FACTOR'] * (2 ** n)
+                time.sleep(backoff_value)
+            memc_pool.put(memc)
+            return ok
     except Exception, e:
         logging.exception("Cannot write to memc %s: %s" % (memc_addr, e))
         return False
