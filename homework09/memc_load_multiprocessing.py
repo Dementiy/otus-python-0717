@@ -20,7 +20,7 @@ AppsInstalled = collections.namedtuple("AppsInstalled", ["dev_type", "dev_id", "
 config = {
     'MEMC_MAX_RETRIES': 1,
     'MEMC_TIMEOUT': 3,
-    'MAX_JOB_QUEUE_SIZE': 1,
+    'MAX_JOB_QUEUE_SIZE': 0,
     'MAX_RESULT_QUEUE_SIZE': 0,
     'THREADS_PER_WORKER': 4
 }
@@ -137,8 +137,12 @@ def handle_logfile(fn, options):
 
             job_queue.put((pools[memc_addr], memc_addr, appsinstalled, options.dry))
 
+            if not all(thread.is_alive() for thread in workers):
+                break
+
     for thread in workers:
-        thread.join()
+        if thread.is_alive():
+            thread.join()
 
     while not result_queue.empty():
         processed_per_worker, errors_per_worker = result_queue.get()
@@ -156,7 +160,7 @@ def handle_logfile(fn, options):
 
 
 def main(options):
-    num_processes = 1 # multiprocessing.cpu_count()
+    num_processes = multiprocessing.cpu_count()
     pool = multiprocessing.Pool(processes=num_processes)
     fnames = sorted(fn for fn in glob.iglob(options.pattern))
     handler = partial(handle_logfile, options=options)
