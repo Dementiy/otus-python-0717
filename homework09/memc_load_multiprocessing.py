@@ -119,7 +119,6 @@ def handle_logfile(fn, options):
     logging.info('Processing %s' % fn)
 
     with gzip.open(fn) as fd:
-        max_lines = 20000
         for line in fd:
             line = line.strip()
             if not line:
@@ -135,11 +134,8 @@ def handle_logfile(fn, options):
                 errors += 1
                 logging.error("Unknow device type: %s" % appsinstalled.dev_type)
                 continue
-            
+
             job_queue.put((pools[memc_addr], memc_addr, appsinstalled, options.dry))
-            max_lines -= 1
-            if not max_lines:
-                break
 
     for thread in workers:
         thread.join()
