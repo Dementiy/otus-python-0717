@@ -9,17 +9,21 @@ import collections
 from optparse import OptionParser
 import appsinstalled_pb2
 import memcache
-from multiprocessing import Process, Queue, cpu_count
+import threading
+import Queue
+import multiprocessing
+from functools import partial
 
 
 NORMAL_ERR_RATE = 0.01
 AppsInstalled = collections.namedtuple("AppsInstalled", ["dev_type", "dev_id", "lat", "lon", "apps"])
-
-
-class Stopper(object):
-    def __eq__(self, other):
-        return type(other) == type(self)
-_sentinel = Stopper()
+config = {
+    'MEMC_MAX_RETRIES': 1,
+    'MEMC_TIMEOUT': 3,
+    'MAX_JOB_QUEUE_SIZE': 1,
+    'MAX_RESULT_QUEUE_SIZE': 0,
+    'THREADS_PER_WORKER': 4
+}
 
 
 def dot_rename(path):
@@ -28,21 +32,26 @@ def dot_rename(path):
     os.rename(path, os.path.join(head, "." + fn))
 
 
-def insert_appsinstalled(memc_addr, appsinstalled, dry_run=False):
+def insert_appsinstalled(memc_pool, memc_addr, appsinstalled, dry_run=False):
     ua = appsinstalled_pb2.UserApps()
     ua.lat = appsinstalled.lat
     ua.lon = appsinstalled.lon
     key = "%s:%s" % (appsinstalled.dev_type, appsinstalled.dev_id)
     ua.apps.extend(appsinstalled.apps)
     packed = ua.SerializeToString()
-    # @TODO persistent connection
-    # @TODO retry and timeouts!
     try:
         if dry_run:
             logging.debug("%s - %s -> %s" % (memc_addr, key, str(ua).replace("\n", " ")))
         else:
-            memc = memcache.Client([memc_addr])
-            memc.set(key, packed)
+            try:
+                memc = memc_pool.get(timeout=0.1)
+            except Queue.Empty:
+                memc = memcache.Client([memc_addr], socket_timeout=config['MEMC_TIMEOUT'])
+            for retry in range(config['MEMC_MAX_RETRIES']):
+                ok = memc.set(key, packed)
+                if ok:
+                    memc_pool.put(memc)
+                    return True
     except Exception, e:
         logging.exception("Cannot write to memc %s: %s" % (memc_addr, e))
         return False
@@ -71,34 +80,21 @@ def parse_appsinstalled(line):
 def handle_task(job_queue, result_queue):
     processed = errors = 0
     while True:
-        task = job_queue.get()
-        if task is None:
+        try:
+            task = job_queue.get(timeout=0.1)
+        except Queue.Empty:
             result_queue.put((processed, errors))
-            continue
-        if task == _sentinel:
-            result_queue.put((processed, errors))
-            break
-        line, device_memc, dry = task
-        line = line.strip()
-        if not line:
-            continue
-        appsinstalled = parse_appsinstalled(line)
-        if not appsinstalled:
-            errors += 1
-            continue
-        memc_addr = device_memc.get(appsinstalled.dev_type)
-        if not memc_addr:
-            errors += 1
-            logging.error("Unknow device type: %s" % appsinstalled.dev_type)
-            continue
-        ok = insert_appsinstalled(memc_addr, appsinstalled, dry)
+            return
+
+        memc_pool, memc_addr, appsinstalled, dry_run = task
+        ok = insert_appsinstalled(memc_pool, memc_addr, appsinstalled, dry_run)
         if ok:
             processed += 1
         else:
             errors += 1
 
 
-def main(options):
+def handle_logfile(fn, options):
     device_memc = {
         "idfa": options.idfa,
         "gaid": options.gaid,
@@ -106,49 +102,70 @@ def main(options):
         "dvid": options.dvid,
     }
 
-    job_queue = Queue()
-    result_queue = Queue()
+    pools = collections.defaultdict(Queue.Queue)
+    job_queue = Queue.Queue(maxsize=config['MAX_JOB_QUEUE_SIZE'])
+    result_queue = Queue.Queue(maxsize=config['MAX_RESULT_QUEUE_SIZE'])
 
-    num_workers = cpu_count()
     workers = []
-    for i in range(num_workers):
-        worker = Process(target=handle_task, args=(job_queue, result_queue))
-        worker.daemon = True
-        workers.append(worker)
-        worker.start()
+    for i in range(config['THREADS_PER_WORKER']):
+        thread = threading.Thread(target=handle_task, args=(job_queue, result_queue))
+        thread.daemon = True
+        workers.append(thread)
 
-    for fn in glob.iglob(options.pattern):
-        processed = errors = 0
-        logging.info('Processing %s' % fn)
-        fd = gzip.open(fn)
+    for thread in workers:
+        thread.start()
+
+    processed = errors = 0
+    logging.info('Processing %s' % fn)
+
+    with gzip.open(fn) as fd:
+        max_lines = 20000
         for line in fd:
-            job_queue.put((line, device_memc, options.dry))
+            line = line.strip()
+            if not line:
+                continue
 
-        for w in workers:
-            job_queue.put(None)
+            appsinstalled = parse_appsinstalled(line)
+            if not appsinstalled:
+                errors += 1
+                continue
 
-        while not result_queue.empty() and not job_queue.empty():
-            processed_per_worker, errors_per_worker = result_queue.get()
-            processed += processed_per_worker
-            errors += errors_per_worker
+            memc_addr = device_memc.get(appsinstalled.dev_type)
+            if not memc_addr:
+                errors += 1
+                logging.error("Unknow device type: %s" % appsinstalled.dev_type)
+                continue
+            
+            job_queue.put((pools[memc_addr], memc_addr, appsinstalled, options.dry))
+            max_lines -= 1
+            if not max_lines:
+                break
 
-        if not processed:
-            fd.close()
-            dot_rename(fn)
-            continue
+    for thread in workers:
+        thread.join()
 
+    while not result_queue.empty():
+        processed_per_worker, errors_per_worker = result_queue.get()
+        processed += processed_per_worker
+        errors += errors_per_worker
+
+    if processed:
         err_rate = float(errors) / processed
         if err_rate < NORMAL_ERR_RATE:
             logging.info("Acceptable error rate (%s). Successfull load" % err_rate)
         else:
             logging.error("High error rate (%s > %s). Failed load" % (err_rate, NORMAL_ERR_RATE))
-        fd.close()
-        dot_rename(fn)
 
-    for w in workers:
-        job_queue.put(_sentinel)
-    for w in workers:
-        w.join()
+    return fn
+
+
+def main(options):
+    num_processes = 1 # multiprocessing.cpu_count()
+    pool = multiprocessing.Pool(processes=num_processes)
+    fnames = sorted(fn for fn in glob.iglob(options.pattern))
+    handler = partial(handle_logfile, options=options)
+    for fn in pool.imap(handler, fnames):
+        dot_rename(fn)
 
 
 def prototest():
