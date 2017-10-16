@@ -16,92 +16,54 @@ typedef struct pbheader_s {
 } pbheader_t;
 #define PBHEADER_INIT {MAGIC, 0, 0}
 
+typedef struct apps_installed_s {
+    char *dev_type;
+    char *dev_id;
+    double *lat;
+    double *lon;
+    uint32_t *apps;
+    size_t n_apps;
+} apps_installed_t;
 
-// https://github.com/protobuf-c/protobuf-c/wiki/Examples
-void example() {
+
+int pack_and_write(apps_installed_t *ua, gzFile f) {
     DeviceApps msg = DEVICE_APPS__INIT;
     DeviceApps__Device device = DEVICE_APPS__DEVICE__INIT;
-    void *buf;
+    void *buf = NULL;
     unsigned len;
 
-    char *device_id = "e7e1a50c0ec2747ca56cd9e1558c0d7c";
-    char *device_type = "idfa";
-    device.has_id = 1;
-    device.id.data = (uint8_t*)device_id;
-    device.id.len = strlen(device_id);
-    device.has_type = 1;
-    device.type.data = (uint8_t*)device_type;
-    device.type.len = strlen(device_type);
-    msg.device = &device;
-
-    msg.has_lat = 1;
-    msg.lat = 67.7835424444;
-    msg.has_lon = 1;
-    msg.lon = -22.8044005471;
-
-    msg.n_apps = 3;
-    msg.apps = malloc(sizeof(uint32_t) * msg.n_apps);
-    msg.apps[0] = 42;
-    msg.apps[1] = 43;
-    msg.apps[2] = 44;
-    len = device_apps__get_packed_size(&msg);
-
-    buf = malloc(len);
-    device_apps__pack(&msg, buf);
-
-    fprintf(stderr,"Writing %d serialized bytes\n",len); // See the length of message
-    fwrite(buf, len, 1, stdout); // Write to stdout to allow direct command line piping
-
-    free(msg.apps);
-    free(buf);
-}
-
-
-int contains(PyObject *o, const char *s) {
-    PyObject *key = PyString_FromString(s);
-    if (PyDict_Contains(o, key)) {
-        Py_DECREF(key);
-        return 1;
-    }
-    Py_DECREF(key);
-    return 0;
-}
-
-
-unsigned create_msg_and_write(char *device_id, char *device_type, double lat, double lon, uint32_t *apps, int n_apps, gzFile f) {
-    DeviceApps msg = DEVICE_APPS__INIT;
-    DeviceApps__Device device = DEVICE_APPS__DEVICE__INIT;
-    void *buf;
-    unsigned len;
-
-    if (device_id) {
+    if (ua->dev_id) {
         device.has_id = 1;
-        device.id.data = (uint8_t*)device_id;
-        device.id.len = strlen(device_id);
+        device.id.data = (uint8_t*)ua->dev_id;
+        device.id.len = strlen(ua->dev_id);
     }
 
-    if (device_type) {
+    if (ua->dev_type) {
         device.has_type = 1;
-        device.type.data = (uint8_t*)device_type;
-        device.type.len = strlen(device_type);
+        device.type.data = (uint8_t*)ua->dev_type;
+        device.type.len = strlen(ua->dev_type);
     }
     msg.device = &device;
 
-    if (lat) {
+    if (ua->lat) {
         msg.has_lat = 1;
-        msg.lat = lat;
+        msg.lat = *ua->lat;
     }
 
-    if (lon) {
+    if (ua->lon) {
         msg.has_lon = 1;
-        msg.lon = lon;
+        msg.lon = *ua->lon;
     }
 
-    msg.n_apps = n_apps;
-    msg.apps = apps;
+    msg.n_apps = ua->n_apps;
+    msg.apps = ua->apps;
     len = device_apps__get_packed_size(&msg);
 
-    buf = malloc(len);
+    if ((buf = malloc(len)) == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+        return -1;
+    }
+
     device_apps__pack(&msg, buf);
 
     pbheader_t header = PBHEADER_INIT;
@@ -109,75 +71,111 @@ unsigned create_msg_and_write(char *device_id, char *device_type, double lat, do
     header.type = DEVICE_APPS_TYPE;
     header.length = len;
 
-    gzwrite(f, &header, sizeof(header));
-    gzwrite(f, buf, len);
+    if ((gzwrite(f, &header, sizeof(header))) <= 0) {
+        PyErr_SetString(PyExc_IOError, "Can't write header to file");
+        free(buf);
+        return -1;
+    }
 
-    free(msg.apps);
+    if ((gzwrite(f, buf, len)) <= 0) {
+        PyErr_SetString(PyExc_IOError, "Can't write message to file");
+        free(buf);
+        return -1;
+    }
+
     free(buf);
     return len;
 }
 
 
-// Extract values from dict
-unsigned handle_item(PyObject *item, gzFile f) {
-    char *device_type = NULL;
-    char *device_id = NULL;
-    if (contains(item, "device")) {
-        PyObject *device = PyDict_GetItemString(item, "device");
-        if (contains(device, "type")) {
-            PyObject *type = PyDict_GetItemString(device, "type");
-            device_type = PyString_AsString(type);
-            Py_DECREF(type);
+// Extract values from dict object to struct
+apps_installed_t* serialize_dict(PyObject *item) {
+    apps_installed_t *ua = calloc(1, sizeof(apps_installed_t));
+    if (ua == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+        return NULL;
+    }
+
+    PyObject *device = PyDict_GetItemString(item, "device");
+    if (device == NULL) {
+        // Skip this item
+        return NULL;
+    }
+
+    if (!PyDict_Check(device)) {
+        PyErr_SetString(PyExc_TypeError, "'device' must be a dictionary");
+        return NULL;
+    }
+
+    PyObject *dev_type = PyDict_GetItemString(device, "type");
+    if (dev_type != NULL) {
+        if (!PyString_Check(dev_type)) {
+            PyErr_SetString(PyExc_TypeError, "'type' must be a string");
+            return NULL;
         }
+        ua->dev_type = PyString_AsString(dev_type);
+    }
 
-        if (contains(device, "id")) {
-            PyObject *id = PyDict_GetItemString(device, "id");
-            device_id = PyString_AsString(id);
-            Py_DECREF(id);
+    PyObject *dev_id = PyDict_GetItemString(device, "id");
+    if (dev_id != NULL) {
+        if (!PyString_Check(dev_id)) {
+            PyErr_SetString(PyExc_TypeError, "'id' must be a string");
+            return NULL;
         }
-
-        //Py_DECREF(device);
+        ua->dev_id = PyString_AsString(dev_id);
     }
 
-    double latitude = 0, longitude = 0;
-    if (contains(item, "lat")) {
-        PyObject *lat = PyDict_GetItemString(item, "lat");
-        latitude = PyFloat_AS_DOUBLE(PyNumber_Float(lat));
-        Py_DECREF(lat);
+    PyObject *lat = PyDict_GetItemString(item, "lat");
+    if (lat != NULL) {
+        if (!PyNumber_Check(lat)) {
+            PyErr_SetString(PyExc_TypeError, "'lat' must be a double");
+            return NULL;
+        }
+        ua->lat = malloc(sizeof(double));
+        if (ua->lat == NULL) {
+            PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+            return NULL;
+        }
+        *ua->lat = PyFloat_AS_DOUBLE(PyNumber_Float(lat));
     }
 
-    if (contains(item, "lon")) {
-        PyObject *lon = PyDict_GetItemString(item, "lon");
-        longitude = PyFloat_AS_DOUBLE(PyNumber_Float(lon));
-        Py_DECREF(lon);
+    PyObject *lon = PyDict_GetItemString(item, "lon");
+    if (lon != NULL) {
+        if (!PyNumber_Check(lat)) {
+            PyErr_SetString(PyExc_TypeError, "'lon' must be a double");
+            return NULL;
+        }
+        ua->lon = malloc(sizeof(double));
+        if (ua->lon == NULL) {
+            PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+            return NULL;
+        }
+        *ua->lon = PyFloat_AS_DOUBLE(PyNumber_Float(lon));
     }
 
-    uint32_t *applications = NULL;
-    int n_apps = 0;
-    if (contains(item, "apps")) {
-        PyObject *apps = PyDict_GetItemString(item, "apps");
-        n_apps = PySequence_Size(apps);
-        applications = malloc(sizeof(uint32_t) * n_apps);
-        PyObject *app;
+    PyObject *apps = PyDict_GetItemString(item, "apps");
+    if (apps != NULL) {
+        if (!PySequence_Check(apps)) {
+            PyErr_SetString(PyExc_TypeError, "'apps' must be a sequence");
+            return NULL;
+        }
+        ua->n_apps = PySequence_Size(apps);
+        ua->apps = malloc(ua->n_apps * sizeof(uint32_t));
+        if (ua->apps == NULL) {
+            PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+            return NULL;
+        }
         apps = PyObject_GetIter(apps);
         int i = 0;
+        PyObject *app;
         while ((app = PyIter_Next(apps))) {
-            long appId = PyLong_AsLong(PyNumber_Long(app));
-            applications[i++] = appId;
+            ua->apps[i++] = PyLong_AsLong(PyNumber_Long(app));
         }
-        Py_DECREF(apps);
     }
 
-    return create_msg_and_write(
-        device_id,
-        device_type,
-        latitude,
-        longitude,
-        applications,
-        n_apps,
-        f
-    );
+    return ua;
 }
+
 
 // Read iterator of Python dicts
 // Pack them to DeviceApps protobuf and write to file with appropriate header
@@ -189,25 +187,48 @@ static PyObject* py_deviceapps_xwrite_pb(PyObject* self, PyObject* args) {
 
     if (!PyArg_ParseTuple(args, "Os", &o, &path))
         return NULL;
-    
+
     o = PyObject_GetIter(o);
     if (!o)
         return NULL;
-    
-    gzFile fi = gzopen(path, "wb");
-    unsigned len = 0;
+
+    gzFile f = gzopen(path, "wb");
+    if (f == Z_NULL) {
+        PyErr_SetString(PyExc_IOError, "Can't open file");
+        Py_DECREF(o);
+        return NULL;
+    }
+
+    int len = 0;
+    int total_len = 0;
+    apps_installed_t *ua;
     while ((item = PyIter_Next(o))) {
-        len += handle_item(item, fi);
+        if (!PyDict_Check(item)) {
+            PyErr_SetString(PyExc_TypeError, "'item' must be a dictionary");
+            return NULL;
+        }
+
+        if ((ua = serialize_dict(item)) != NULL) {
+            if ((len = pack_and_write(ua, f)) == -1) {
+                Py_DECREF(item);
+                gzclose(f);
+                return NULL;
+            }
+            total_len += len;
+            free(ua->lat);
+            free(ua->lon);
+            free(ua->apps);
+            free(ua);
+        }
         Py_DECREF(item);
     }
-    gzclose(fi);
-    
+    gzclose(f);
     Py_DECREF(o);
-    
+
     printf("Write to: %s\n", path);
-    return PyInt_FromLong(len);
-    //Py_RETURN_NONE;
+    return PyInt_FromLong(total_len);
 }
+
 
 // Unpack only messages with type == DEVICE_APPS_TYPE
 // Return iterator of Python dicts
