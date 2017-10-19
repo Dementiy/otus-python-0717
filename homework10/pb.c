@@ -215,6 +215,10 @@ static PyObject* py_deviceapps_xwrite_pb(PyObject* self, PyObject* args) {
             if ((len = pack_and_write(ua, f)) == -1) {
                 Py_DECREF(item);
                 Py_DECREF(o);
+                free(ua->lat);
+                free(ua->lon);
+                free(ua->apps);
+                free(ua);
                 gzclose(f);
                 return NULL;
             }
