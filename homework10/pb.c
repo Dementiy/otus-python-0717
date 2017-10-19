@@ -205,12 +205,16 @@ static PyObject* py_deviceapps_xwrite_pb(PyObject* self, PyObject* args) {
     while ((item = PyIter_Next(o))) {
         if (!PyDict_Check(item)) {
             PyErr_SetString(PyExc_TypeError, "'item' must be a dictionary");
+            Py_DECREF(item);
+            Py_DECREF(o);
+            gzclose(f);
             return NULL;
         }
 
         if ((ua = serialize_dict(item)) != NULL) {
             if ((len = pack_and_write(ua, f)) == -1) {
                 Py_DECREF(item);
+                Py_DECREF(o);
                 gzclose(f);
                 return NULL;
             }
