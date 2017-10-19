@@ -99,11 +99,13 @@ apps_installed_t* serialize_dict(PyObject *item) {
     PyObject *device = PyDict_GetItemString(item, "device");
     if (device == NULL) {
         // Skip this item
+        free(ua);
         return NULL;
     }
 
     if (!PyDict_Check(device)) {
         PyErr_SetString(PyExc_TypeError, "'device' must be a dictionary");
+        free(ua);
         return NULL;
     }
 
@@ -111,6 +113,7 @@ apps_installed_t* serialize_dict(PyObject *item) {
     if (dev_type != NULL) {
         if (!PyString_Check(dev_type)) {
             PyErr_SetString(PyExc_TypeError, "'type' must be a string");
+            free(ua);
             return NULL;
         }
         ua->dev_type = PyString_AsString(dev_type);
@@ -120,6 +123,7 @@ apps_installed_t* serialize_dict(PyObject *item) {
     if (dev_id != NULL) {
         if (!PyString_Check(dev_id)) {
             PyErr_SetString(PyExc_TypeError, "'id' must be a string");
+            free(ua);
             return NULL;
         }
         ua->dev_id = PyString_AsString(dev_id);
@@ -129,11 +133,13 @@ apps_installed_t* serialize_dict(PyObject *item) {
     if (lat != NULL) {
         if (!PyNumber_Check(lat)) {
             PyErr_SetString(PyExc_TypeError, "'lat' must be a double");
+            free(ua);
             return NULL;
         }
         ua->lat = malloc(sizeof(double));
         if (ua->lat == NULL) {
             PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+            free(ua);
             return NULL;
         }
         *ua->lat = PyFloat_AS_DOUBLE(PyNumber_Float(lat));
@@ -143,10 +149,14 @@ apps_installed_t* serialize_dict(PyObject *item) {
     if (lon != NULL) {
         if (!PyNumber_Check(lat)) {
             PyErr_SetString(PyExc_TypeError, "'lon' must be a double");
+            free(ua->lat);
+            free(ua);
             return NULL;
         }
         ua->lon = malloc(sizeof(double));
         if (ua->lon == NULL) {
+            free(ua->lat);
+            free(ua);
             PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
             return NULL;
         }
@@ -157,12 +167,18 @@ apps_installed_t* serialize_dict(PyObject *item) {
     if (apps != NULL) {
         if (!PySequence_Check(apps)) {
             PyErr_SetString(PyExc_TypeError, "'apps' must be a sequence");
+            free(ua->lat);
+            free(ua->lon);
+            free(ua);
             return NULL;
         }
         ua->n_apps = PySequence_Size(apps);
         ua->apps = malloc(ua->n_apps * sizeof(uint32_t));
         if (ua->apps == NULL) {
             PyErr_SetString(PyExc_MemoryError, "Can't allocate memory");
+            free(ua->lat);
+            free(ua->lon);
+            free(ua);
             return NULL;
         }
         apps = PyObject_GetIter(apps);
@@ -205,12 +221,20 @@ static PyObject* py_deviceapps_xwrite_pb(PyObject* self, PyObject* args) {
     while ((item = PyIter_Next(o))) {
         if (!PyDict_Check(item)) {
             PyErr_SetString(PyExc_TypeError, "'item' must be a dictionary");
+            Py_DECREF(item);
+            Py_DECREF(o);
+            gzclose(f);
             return NULL;
         }
 
         if ((ua = serialize_dict(item)) != NULL) {
             if ((len = pack_and_write(ua, f)) == -1) {
                 Py_DECREF(item);
+                Py_DECREF(o);
+                free(ua->lat);
+                free(ua->lon);
+                free(ua->apps);
+                free(ua);
                 gzclose(f);
                 return NULL;
             }
