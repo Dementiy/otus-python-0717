@@ -39,7 +39,7 @@ type Options struct {
 const NORMAL_ERR_RATE = 0.01
 
 
-func insertAppsInstalled(memc_addr string, apps_installed *AppsInstalled, dry_run bool) bool {
+func insertAppsInstalled(memc_pool map[string]*memcache.Client, memc_addr string, apps_installed *AppsInstalled, dry_run bool) bool {
     ua := &appsinstalled.UserApps{
         Lat: proto.Float64(apps_installed.lat),
         Lon: proto.Float64(apps_installed.lon),
@@ -50,7 +50,11 @@ func insertAppsInstalled(memc_addr string, apps_installed *AppsInstalled, dry_ru
     if dry_run {
         log.Printf("%s - %s -> %s", memc_addr, key, ua.String())
     } else {
-        mc := memcache.New(memc_addr)
+        mc, ok := memc_pool[memc_addr]
+        if !ok {
+            mc = memcache.New(memc_addr)
+            memc_pool[memc_addr] = mc
+        }
         err := mc.Set(&memcache.Item{
             Key: key,
             Value: packed,
@@ -125,6 +129,7 @@ func processFile(fname string, options Options) {
     }
 
     processed, errors := 0, 0
+    memc_pool := map[string]*memcache.Client{}
     scanner := bufio.NewScanner(gz)
     for scanner.Scan() {
         line := scanner.Text()
@@ -147,7 +152,7 @@ func processFile(fname string, options Options) {
             continue
         }
 
-        ok = insertAppsInstalled(memc_addr, apps_installed, options.dry)
+        ok = insertAppsInstalled(memc_pool, memc_addr, apps_installed, options.dry)
         if ok {
             processed += 1
         } else {
