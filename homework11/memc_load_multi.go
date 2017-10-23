@@ -12,6 +12,7 @@ import (
     "bufio"
     "os"
     "reflect"
+    "sync"
     "github.com/golang/protobuf/proto"
     "github.com/bradfitz/gomemcache/memcache"
     "./appsinstalled"
@@ -28,12 +29,20 @@ type AppsInstalled struct {
 
 
 type Options struct {
+    nworkers int
+    bufsize int
     dry bool
     pattern string
     idfa string
     gaid string
     adid string
     dvid string
+}
+
+
+type Stat struct {
+    errors int
+    processed int
 }
 
 const NORMAL_ERR_RATE = 0.01
@@ -71,7 +80,7 @@ func insertAppsInstalled(memc_pool map[string]*memcache.Client, memc_addr string
 func parseAppsInstalled(line string) (*AppsInstalled, error) {
     line_parts := strings.Split(line, "\t")
     if len(line_parts) < 5 {
-        return nil, errors.New("")
+        return nil, errors.New("Not all parts was found in line")
     }
 
     dev_type := line_parts[0]
@@ -111,7 +120,7 @@ func processFile(fname string, options Options) {
     log.Println("Processing:", fname)
     f, err := os.Open(fname)
     if err != nil {
-        // Handle error
+        log.Fatalf("Can't open file: %s", fname)
     }
     defer f.Close()
 
@@ -128,39 +137,104 @@ func processFile(fname string, options Options) {
         "dvid": options.dvid,
     }
 
-    processed, errors := 0, 0
-    memc_pool := map[string]*memcache.Client{}
     scanner := bufio.NewScanner(gz)
-    for scanner.Scan() {
-        line := scanner.Text()
-        line = strings.Trim(line, " ")
 
-        if line == "" {
-            continue
-        }
+    lines_queue := make(chan string, options.bufsize)
+    apps_queue := make(chan *AppsInstalled, options.bufsize)
+    processed_queue := make(chan int, options.bufsize)
+    errors_queue := make(chan int, options.bufsize)
+    results_queue := make(chan Stat)
 
-        apps_installed, err := parseAppsInstalled(line)
-        if err != nil {
-            errors += 1
-            continue
-        }
+    // Воркер, читающий лог-файл
+    go func() {
+        for scanner.Scan() {
+            line := scanner.Text()
+            line = strings.Trim(line, " ")
 
-        memc_addr, ok := device_memc[apps_installed.dev_type]
-        if !ok {
-            errors += 1
-            log.Println("Unknow device type:", apps_installed.dev_type)
-            continue
+            if line == "" {
+                continue
+            }
+            lines_queue <- line
         }
+        close(lines_queue)
+    }()
 
-        ok = insertAppsInstalled(memc_pool, memc_addr, apps_installed, options.dry)
-        if ok {
-            processed += 1
-        } else {
-            errors += 1
-        }
+    // Воркеры, отвечающие за парсинг строк
+    var wg_apps sync.WaitGroup
+    for i := 0; i < options.nworkers; i++ {
+        wg_apps.Add(1)
+        go func() {
+            for line := range lines_queue {
+                apps_installed, err := parseAppsInstalled(line)
+                if err != nil {
+                    errors_queue <- 1
+                    continue
+                }
+                apps_queue <- apps_installed
+            }
+            wg_apps.Done()
+        }()
     }
 
-    err_rate := float32(errors) / float32(processed)
+    go func() {
+        // Закрываем канал apps_queue, если обработали все строки
+        wg_apps.Wait()
+        close(apps_queue)
+    }()
+
+    // Воркер, собирающий статистику
+    go func() {
+        errors, processed := 0, 0
+        for errors_queue != nil && processed_queue != nil {
+            select {
+            case _, ok := <-errors_queue:
+                if !ok {
+                    errors_queue = nil
+                    break
+                }
+                errors += 1
+            case _, ok := <-processed_queue:
+                if !ok {
+                    processed_queue = nil
+                    break
+                }
+                processed += 1
+            }
+        }
+        results_queue <- Stat{errors, processed}
+    }()
+
+    // Воркеры, которые пишут в мемкеш
+    var wg_memc sync.WaitGroup
+    for i := 0; i < options.nworkers; i++ {
+        wg_memc.Add(1)
+        go func() {
+            memc_pool := map[string]*memcache.Client{}
+            for app := range apps_queue {
+                memc_addr, ok := device_memc[app.dev_type]
+                if !ok {
+                    errors_queue <- 1
+                    log.Println("Unknow device type:", app.dev_type)
+                    continue
+                }
+
+                ok = insertAppsInstalled(memc_pool, memc_addr, app, options.dry)
+                if ok {
+                    processed_queue <- 1
+                } else {
+                    errors_queue <- 1
+                }
+            }
+            wg_memc.Done()
+        }()
+    }
+    wg_memc.Wait()
+
+    close(errors_queue)
+    close(processed_queue)
+
+    stat := <-results_queue
+    err_rate := float32(stat.errors) / float32(stat.processed)
     if err_rate < NORMAL_ERR_RATE {
         log.Printf("Acceptable error rate (%g). Successfull load\n", err_rate)
     } else {
@@ -224,6 +298,8 @@ func main() {
     test := flag.Bool("test", false, "")
     pattern := flag.String("pattern", "/data/appsinstalled/*.tsv.gz", "")
     logfile := flag.String("log", "", "")
+    nworkers := flag.Int("workers", 1, "")
+    bufsize := flag.Int("bufsize", 10, "")
     idfa := flag.String("idfa", "127.0.0.1:33013", "")
     gaid := flag.String("gaid", "127.0.0.1:33014", "")
     adid := flag.String("adid", "127.0.0.1:33015", "")
@@ -231,6 +307,8 @@ func main() {
     flag.Parse()
 
     options := Options{
+        nworkers: *nworkers,
+        bufsize: *bufsize,
         dry: *dry,
         pattern: *pattern,
         idfa: *idfa,
