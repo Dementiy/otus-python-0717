@@ -48,7 +48,7 @@ type Stat struct {
 const NORMAL_ERR_RATE = 0.01
 
 
-func insertAppsInstalled(memc_pool map[string]*memcache.Client, memc_addr string, apps_installed *AppsInstalled, dry_run bool) bool {
+func insertAppsInstalled(mc *memcache.Client, memc_addr string, apps_installed *AppsInstalled, dry_run bool) bool {
     ua := &appsinstalled.UserApps{
         Lat: proto.Float64(apps_installed.lat),
         Lon: proto.Float64(apps_installed.lon),
@@ -59,11 +59,6 @@ func insertAppsInstalled(memc_pool map[string]*memcache.Client, memc_addr string
     if dry_run {
         log.Printf("%s - %s -> %s", memc_addr, key, ua.String())
     } else {
-        mc, ok := memc_pool[memc_addr]
-        if !ok {
-            mc = memcache.New(memc_addr)
-            memc_pool[memc_addr] = mc
-        }
         err := mc.Set(&memcache.Item{
             Key: key,
             Value: packed,
@@ -140,10 +135,15 @@ func processFile(fname string, options Options) {
     scanner := bufio.NewScanner(gz)
 
     lines_queue := make(chan string, options.bufsize)
-    apps_queue := make(chan *AppsInstalled, options.bufsize)
     processed_queue := make(chan int, options.bufsize)
     errors_queue := make(chan int, options.bufsize)
     results_queue := make(chan Stat)
+
+    // Создаем отдельный канал для каждого типа устройств
+    memc_queues := make(map[string]chan *AppsInstalled)
+    for dev_type := range device_memc {
+        memc_queues[dev_type] = make(chan *AppsInstalled, options.bufsize)
+    }
 
     // Воркер, читающий лог-файл
     go func() {
@@ -170,17 +170,17 @@ func processFile(fname string, options Options) {
                     errors_queue <- 1
                     continue
                 }
-                apps_queue <- apps_installed
+                memc_queue, ok := memc_queues[apps_installed.dev_type]
+                if !ok {
+                    log.Println("Unknow device type:", apps_installed.dev_type)
+                    errors_queue <- 1
+                    continue
+                }
+                memc_queue <- apps_installed
             }
             wg_apps.Done()
         }()
     }
-
-    go func() {
-        // Закрываем канал apps_queue, если обработали все строки
-        wg_apps.Wait()
-        close(apps_queue)
-    }()
 
     // Воркер, собирающий статистику
     go func() {
@@ -206,19 +206,14 @@ func processFile(fname string, options Options) {
 
     // Воркеры, которые пишут в мемкеш
     var wg_memc sync.WaitGroup
-    for i := 0; i < options.nworkers; i++ {
+    for dev_type := range device_memc {
         wg_memc.Add(1)
-        go func() {
-            memc_pool := map[string]*memcache.Client{}
-            for app := range apps_queue {
-                memc_addr, ok := device_memc[app.dev_type]
-                if !ok {
-                    errors_queue <- 1
-                    log.Println("Unknow device type:", app.dev_type)
-                    continue
-                }
-
-                ok = insertAppsInstalled(memc_pool, memc_addr, app, options.dry)
+        go func(dev_type string) {
+            memc_addr := device_memc[dev_type]
+            mc := memcache.New(memc_addr)
+            app_queue := memc_queues[dev_type]
+            for app := range app_queue {
+                ok := insertAppsInstalled(mc, memc_addr, app, options.dry)
                 if ok {
                     processed_queue <- 1
                 } else {
@@ -226,10 +221,17 @@ func processFile(fname string, options Options) {
                 }
             }
             wg_memc.Done()
-        }()
+        }(dev_type)
     }
-    wg_memc.Wait()
 
+    // Дожидаемся воркеров, которые парсят строки
+    wg_apps.Wait()
+    for _, queue := range memc_queues {
+        close(queue)
+    }
+
+    // Дожидаемся воркеров, которые пишут в мемкеш
+    wg_memc.Wait()
     close(errors_queue)
     close(processed_queue)
 
