@@ -29,6 +29,8 @@ type AppsInstalled struct {
 
 
 type Options struct {
+    test bool
+    logfile string
     nworkers int
     bufsize int
     dry bool
@@ -111,7 +113,7 @@ func parseAppsInstalled(line string) (*AppsInstalled, error) {
 }
 
 
-func processFile(fname string, options Options) {
+func processFile(fname string, options *Options) {
     log.Println("Processing:", fname)
     f, err := os.Open(fname)
     if err != nil {
@@ -147,6 +149,7 @@ func processFile(fname string, options Options) {
 
     // Воркер, читающий лог-файл
     go func() {
+        max_lines := 1000
         for scanner.Scan() {
             line := scanner.Text()
             line = strings.Trim(line, " ")
@@ -155,6 +158,10 @@ func processFile(fname string, options Options) {
                 continue
             }
             lines_queue <- line
+            max_lines -= 1
+            if max_lines == 0 {
+                break
+            }
         }
         close(lines_queue)
     }()
@@ -282,7 +289,7 @@ func dotRename(path string) {
 }
 
 
-func processFiles(options Options) {
+func processFiles(options *Options) {
     files, err := filepath.Glob(options.pattern)
     if err != nil {
         log.Fatalf("Could not find files for the given pattern: %s", options.pattern)
@@ -294,41 +301,35 @@ func processFiles(options Options) {
 }
 
 
-func main() {
-    // Parse arguments
-    dry := flag.Bool("dry", false, "")
-    test := flag.Bool("test", false, "")
-    pattern := flag.String("pattern", "/data/appsinstalled/*.tsv.gz", "")
-    logfile := flag.String("log", "", "")
-    nworkers := flag.Int("workers", 1, "")
-    bufsize := flag.Int("bufsize", 10, "")
-    idfa := flag.String("idfa", "127.0.0.1:33013", "")
-    gaid := flag.String("gaid", "127.0.0.1:33014", "")
-    adid := flag.String("adid", "127.0.0.1:33015", "")
-    dvid := flag.String("dvid", "127.0.0.1:33016", "")
+func parseArguments() *Options {
+    options := &Options{}
+    flag.BoolVar(&options.dry, "dry", false, "")
+    flag.BoolVar(&options.test, "test", false, "")
+    flag.StringVar(&options.pattern, "pattern", "/data/appsinstalled/*.tsv.gz", "")
+    flag.StringVar(&options.logfile, "log", "", "")
+    flag.IntVar(&options.nworkers, "workers", 1, "")
+    flag.IntVar(&options.bufsize, "bufsize", 10, "")
+    flag.StringVar(&options.idfa, "idfa", "127.0.0.1:33013", "")
+    flag.StringVar(&options.gaid, "gaid", "127.0.0.1:33014", "")
+    flag.StringVar(&options.adid, "adid", "127.0.0.1:33015", "")
+    flag.StringVar(&options.dvid, "dvid", "127.0.0.1:33016", "")
     flag.Parse()
+    return options
+}
 
-    options := Options{
-        nworkers: *nworkers,
-        bufsize: *bufsize,
-        dry: *dry,
-        pattern: *pattern,
-        idfa: *idfa,
-        gaid: *gaid,
-        adid: *adid,
-        dvid: *dvid,
-    }
 
-    if *logfile != "" {
-        f, err := os.OpenFile(*logfile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+func main() {
+    options := parseArguments()
+    if options.logfile != "" {
+        f, err := os.OpenFile(options.logfile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
         if err != nil {
-            log.Fatalf("Cannot open log file: %s", logfile)
+            log.Fatalf("Cannot open log file: %s", options.logfile)
         }
         defer f.Close()
         log.SetOutput(f)
     }
 
-    if *test {
+    if options.test {
         prototest()
         os.Exit(0)
     }
