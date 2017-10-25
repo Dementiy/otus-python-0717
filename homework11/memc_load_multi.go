@@ -168,7 +168,6 @@ func fileReader(filename string, lines_queue chan string) error {
 
     gz, err := gzip.NewReader(f)
     if err != nil {
-        // Handle error
         log.Printf("Can't create a new Reader %v", err)
         return err
     }
