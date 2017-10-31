@@ -1,0 +1,338 @@
+swagger: '2.0'
+info:
+  description: Пример API для проекта "Hasker" на курсе OTUS
+  version: 0.1.0
+  title: Hasker API
+  contact:
+    email: dementiy@yandex.ru
+
+consumes:
+- application/json
+produces:
+- application/json
+
+paths:
+  /:
+    get:
+      summary: Получение списка вопросов
+      operationId: questions
+      description: |
+        Список вопросов с пагинацией по 5 вопросов на страницу. 
+        Вопросы упорядочены по дате создания.
+      parameters:
+      - in: query
+        name: page
+        description: Номер страницы.
+        required: false
+        type: integer
+      responses:
+        200:
+          description: Упорядоченный список вопросов.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Questions'
+        404:
+          description: Не верно указан номер страницы для пагинации.
+    
+  /trending:
+    get:
+      summary: Получение списка популярных вопросов
+      operationId: trending
+      description: |
+        Список популярных вопросов с пагинацией по 5 вопросов на страницу. 
+        Вопросы упорядочены по числу голосов и дате создания.
+      parameters:
+      - in: query
+        name: page
+        description: Номер страницы.
+        required: false
+        type: integer
+      responses:
+        200:
+          description: Упорядоченный список вопросов.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Questions'
+        404:
+          description: Не верно указан номер страницы для пагинации.
+  
+  /search:
+    get:
+      summary: Поиск вопросов
+      operationId: search
+      description: |
+        Получение списка вопросов по заданной поисковой строке с пагинацией по 5 вопросов на страницу. Вопросы упорядочены по дате создания.
+      parameters:
+      - in: query
+        name: q
+        description: Строка запроса. Для поиска по тегам запрос должен начинаться с префикса "tag:"
+        required: true
+        type: string
+      responses:
+        200:
+          description: Упорядоченный список вопросов.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Questions'
+        400:
+          description: Запрос не может быть пустым.
+        404:
+          description: Не верно указан номер страницы для пагинации.
+  
+  /questions/{id}/answers:
+    get:
+      summary: Получение списка ответов к вопросу
+      operationId: questionsGetAnswers
+      description: | 
+        Получение списка ответов к указанному вопросу по его идентификатору.
+      parameters:
+      - name: id
+        in: path
+        description: Идентификатор вопроса.
+        required: true
+        type: number
+        format: int64
+      responses:
+        200:
+          description: Список ответов упорядоченный по числу голосов.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Answers'
+        404:
+          description: Не существующий вопрос.
+    
+  /login:
+    post:
+      summary: Базовая авторизация
+      operationId: login
+      description: Базовая авторизация.
+      parameters:
+      - name: body
+        in: body
+        description: Логин и пароль пользователя.
+        required: true
+        schema:
+          $ref: '#/definitions/Login'
+      responses:
+        200:
+          description: Пользователь авторизован.
+        400:
+          description: Пользователь с указанным логином и паролем не найден.
+  
+  /questions/{id}/vote:
+    post:
+      summary: Проголосовать за вопрос
+      description: |
+        Изменение голоса за вопрос.
+
+        Один пользователь учитывается только один раз и может изменить своё
+        мнение.
+      operationId: questionVote
+      parameters:
+      - name: id
+        in: path
+        description: Идентификатор вопроса.
+        required: true
+        type: number
+        format: identity
+      - name: value
+        in: body
+        description: Отданный голос.
+        required: true
+        schema:
+          $ref: '#/definitions/Vote'
+      responses:
+        201:
+          description: |
+            Информация о общем числе голосов.
+        400:
+          description: |
+            Значение не валидно. Пользователь не может голосовать дважды или за свой вопрос.
+        403:
+          description: |
+            Пользователь не авторизован.
+        405:
+          description: |
+            Вопроса не существует.
+  
+  /answers/{id}/vote:
+    post:
+      summary: Проголосовать за ответ
+      description: |
+        Изменение голоса за вопрос.
+
+        Один пользователь учитывается только один раз и может изменить своё
+        мнение.
+      operationId: answerVote
+      parameters:
+      - name: id
+        in: path
+        description: Идентификатор ответа.
+        required: true
+        type: number
+        format: identity
+      - name: value
+        in: body
+        description: Если значние больше или равно 0, то пользователь голосует "за", иначе "против".
+        required: true
+        schema:
+          $ref: '#/definitions/Vote'
+      responses:
+        201:
+          description: |
+            Информация о общем числе голосов.
+        400:
+          description: |
+            Значение не валидно. Пользователь не может голосовать дважды или за свой ответ.
+        403:
+          description: |
+            Пользователь не авторизован.
+        405:
+          description: |
+            Ответа не существует.
+
+definitions:
+  Question:
+    description: |
+      Вопрос.
+    type: object
+    properties:
+      id:
+        type: number
+        format: int64
+        description: Идентификатор данного вопроса.
+        readOnly: true
+      title:
+        type: string
+        format: text
+        description: Заголовок вопроса.
+        example: Python или Go?
+        x-isnullable: false
+      text:
+        type: string
+        format: text
+        description: Текст вопроса.
+        example: Что лучше Python или Go?
+        x-isnullable: false
+      author:
+        type: string
+        format: identity
+        description: Автор, задавший данный вопрос.
+        example: dementiy
+        x-isnullable: false
+      answered:
+        type: boolean
+        description: |
+          Истина, если вопрос помечен автором как "получен подходящий ответ".
+        readOnly: true
+        x-isnullable: false
+      total_votes:
+        type: number
+        format: int64
+        description: Число голосов за данный вопрос.
+        readOnly: true
+      tags:
+        $ref: '#/definitions/Tags'
+      created:
+        type: string
+        format: date-time
+        description: Дата создания вопроса.
+        readOnly: true
+        x-isnullable: true
+  
+  Questions:
+    type: array
+    items:
+      $ref: '#/definitions/Question'
+  
+  Tag:
+    description: Тег
+    type: object
+    properties:
+      name:
+        type: string
+        format: text
+        description: Имя тега.
+        readOnly: true
+  
+  Tags:
+    type: array
+    items:
+      $ref: '#/definitions/Tag'
+      
+  Answer:
+    description: |
+      Ответ.
+    type: object
+    properties:
+      id:
+        type: number
+        format: int64
+        description: Идентификатор данного ответа.
+        readOnly: true
+      text:
+        type: string
+        format: text
+        description: Текст ответа.
+        example: Python!
+        x-isnullable: false
+      author:
+        type: string
+        format: identity
+        description: Автор, давший данный ответ.
+        example: dementiy
+        x-isnullable: false
+      answer:
+        type: boolean
+        description: |
+          Истина, если ответ помечен автором как "подходящий".
+        readOnly: true
+        x-isnullable: false
+      total_votes:
+        type: number
+        format: int64
+        description: Число голосов за данный ответ.
+        readOnly: true
+      created:
+        type: string
+        format: date-time
+        description: Дата создания ответа.
+        readOnly: true
+        x-isnullable: true
+  
+  Answers:
+    type: array
+    items:
+      $ref: '#/definitions/Answer'
+  
+  Vote:
+    type: object
+    description: |
+      Информация о голосовании пользователя.
+    properties:
+      value:
+        type: number
+        format: int32
+        description: Отданный голос.
+        enum:
+        - -1
+        - 1
+        x-isnullable: false
+  
+  Login:
+    required: [username, password]
+    properties:
+      username:
+        type: string
+        minLength: 1
+      password:
+        type: string
+        minLength: 8
+
+basePath: /api
+schemes:
+ - http

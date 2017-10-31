@@ -1,11 +1,22 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="ui center aligned grid" style="margin-top: 0px;">
+<div class="ui secondary menu">
+    <a href="{% url 'qa:index' %}" class="{% if not request.GET.order %}active{% endif %} item">
+        <h3>New questions</h3>
+    </a>
+    <a href="{% url 'qa:index' %}?order=votes" class="{% if request.GET.order %}active{% endif %} item">
+        <h3>Hot questions</h3>
+    </a>
+</div>
+</div>
+
 <div id="questions" class="ui divided items">
 {% for question in questions %}
     <div class="item">
         <div class="content">
-            <a href="{% url 'qa:question' question.slug %}" class="header">{{ question.title }}</a>
+            <a href="{{ question.get_absolute_url }}" class="header">{{ question.title }}</a>
             <div class="meta">
                 asked by {{ question.author.username }} | {{ question.created_at|timesince }} ago
             </div>
@@ -13,7 +24,7 @@
                 <p>{{ question.text|truncatechars:200 }}</p>
             </div>
             <div class="extra">
-                <div class="ui label">Votes<div class="detail">{{ question.votes }}</div></div>
+                <div class="ui label">Votes<div class="detail">{{ question.total_votes }}</div></div>
                 {% if question.answered %}
                     <div class="ui green label">
                 {% else %}
@@ -32,19 +43,19 @@
 {% if is_paginated %}
 <div class="ui pagination menu">
     {% if page_obj.has_previous %}
-    <a class="item" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">&laquo;</a>
+    <a class="item" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.order %}&order=votes{% endif %}">&laquo;</a>
     {% endif %}
 
     {% for i in paginator.page_range %}
         {% if page_obj.number == i %}
             <a class="active item">{{ i }}</a>
         {% else %}
-            <a href="?page={{ i }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" class="item">{{ i }}</a>
+            <a href="?page={{ i }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.order %}&order=votes{% endif %}" class="item">{{ i }}</a>
         {% endif %}
     {% endfor %}
 
     {% if page_obj.has_next %}
-        <a class="item" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">&raquo;</a>
+        <a class="item" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.order %}&order=votes{% endif %}">&raquo;</a>
     {% endif %}
 </div>
 {% endif %}

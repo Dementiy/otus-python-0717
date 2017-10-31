@@ -21,11 +21,13 @@
 
                     <!-- Votes -->
                     {% if user.is_authenticated and user != question.author %}
-                        <a onClick="questionVoteDown({{ question.id }});"><i class="arrow red down icon"></i></a>
-                        <i id="question_vote" class="ui label">{{ question.votes }}</i>
-                        <a onClick="questionVoteUp({{ question.id }});"><i class="arrow teal up icon"></i></a>
+                    <div id="question-vote-{{ question.id }}">
+                        <a href="/question/{{ question.id }}/vote" class="vote" data-target="#question-vote-{{ question.id }}" data-value="-1"><i class="arrow red down icon"></i></a>
+                        <i class="ui label"><span>{{ question.total_votes }}</span></i>
+                        <a href="/question/{{ question.id }}/vote" class="vote" data-target="#question-vote-{{ question.id }}" data-value="1"><i class="arrow teal up icon"></i></a>
+                    </div>
                     {% else %}
-                        <i id="question_vote" class="ui label">Votes: {{ question.votes }}</i>
+                        <i id="question_vote" class="ui label">Votes: {{ question.total_votes }}</i>
                     {% endif %}
 
                     <!-- Tags -->
@@ -48,21 +50,24 @@
             <p>{{ answer.text }}</p>
             <div class="extra">
                 <p>Answered by {{ answer.author.username }} | {{ answer.created_at|timesince }} ago</p>
+
                 <!-- User can't vote for own answer -->
                 {% if user.is_authenticated and user != answer.author %}
-                    <a onClick="answerVoteDown({{ answer.id }});"><i class="arrow red down icon"></i></a>
-                    <i id="answer_vote{{ answer.id }}" class="ui label">{{ answer.votes }}</i>
-                    <a onClick="answerVoteUp({{ answer.id }});"><i class="arrow teal up icon"></i></a>
+                <div id="answer-vote-{{ answer.id }}">
+                    <a href="/answer/{{ answer.id }}/vote" class="vote" data-target="#answer-vote-{{ answer.id }}" data-value="-1"><i class="arrow red down icon"></i></a>
+                    <i class="ui label"><span>{{ answer.total_votes }}</span></i>
+                    <a href="/answer/{{ answer.id }}/vote" class="vote" data-target="#answer-vote-{{ answer.id }}" data-value="1"><i class="arrow teal up icon"></i></a>
+                </div>
                 {% else %}
-                    <i class="ui label">Votes: {{ answer.votes }}</i>
+                    <i class="ui label">Votes: {{ answer.total_votes }}</i>
                 {% endif %}
 
                 <!-- Only author of question can mark answer -->
                 {% if user == question.author %}
                     {% if answer.answer %}
-                        <a id="answer{{ answer.id }}" onClick="mark({{ answer.id }});" class="ui right floated green label">
+                        <a href="/answer/{{ answer.id }}/mark" class="mark ui right floated green label">
                     {% else %}
-                        <a id="answer{{ answer.id }}" onClick="mark({{ answer.id }});" class="ui right floated grey label">
+                        <a href="/answer/{{ answer.id }}/mark" class="mark ui right floated grey label">
                     {% endif %}
                     <i class="checkmark icon"></i>mark</a>
                 {% else %}

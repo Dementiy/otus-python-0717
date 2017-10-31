@@ -10,11 +10,13 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db import transaction
 
 from .models import Question, Answer, Tag
-from .forms import QuestionForm, AnswerForm
+from .forms import QuestionForm, AnswerForm, SearchForm
 
 
 class IndexView(ListView):
@@ -23,40 +25,53 @@ class IndexView(ListView):
     context_object_name = 'questions'
     paginate_by = 5
 
+    def get_queryset(self):
+        order = self.request.GET.get('order')
+        queryset = Question.objects.\
+            select_related('author').\
+            prefetch_related('answers').\
+            prefetch_related('tags').all()
+        if order:
+            queryset = queryset.order_by('-total_votes')
+        return queryset
+
 
 class SearchView(IndexView):
 
     def get_queryset(self):
-        queryset = Question.objects.order_by('-votes', '-created_at')
-        query = self.request.GET.get('q')
-        if not query:
-            return Question.objects.none()
-        if query.startswith('tag:'):
-            queryset = queryset.filter(tags__name=query[4:])
-        else:
-            query_list = query.split()
-            queryset = queryset.filter(
-                reduce(operator.and_,
-                    (Q(title__icontains=q) for q in query_list)) |
-                reduce(operator.and_,
-                    (Q(text__icontains=q) for q in query_list))
-            )
+        q = self.request.GET.get('q')
+        queryset = Question.objects.none()
+        if not q:
+            return queryset
+        form = SearchForm(self.request.GET)
+        if form.is_valid():
+            query = form.cleaned_data['q']
+            if query.startswith('tag:'):
+                query_list = query[4:].split(',')
+                queryset = Question.objects.search_by_tags(query_list)
+            else:
+                query_list = query.split()
+                queryset = Question.objects.search(query_list)
+            queryset = queryset.\
+                select_related('author').\
+                prefetch_related('answers').\
+                prefetch_related('tags')
         return queryset
 
 
 @login_required()
+@require_http_methods(["GET", "POST"])
 def ask(request):
     form = QuestionForm(request.POST or None)
     if form.is_valid():
         question = form.save(commit=False)
         question.author = request.user
-        question.save()
-        tags_list = form.cleaned_data['tags'].split(',')
-        for tag_name in tags_list:
-            tag, created = Tag.objects.get_or_create(name=tag_name)
-            question.tags.add(tag)
+        tags_list = form.cleaned_data['tags']
+	with transaction.atomic():
+            question.save(tags_list=tags_list)
         return redirect(reverse("qa:question", kwargs={
-            "slug": question.slug
+            "slug": question.slug,
+            "pk": question.pk
         }))
     return render(request, "qa/ask.html", {
         "form": form
@@ -71,7 +86,10 @@ class QuestionView(DetailView):
     def get_context_data(self, **kwargs):
         context_data = super(QuestionView, self).get_context_data(**kwargs)
         question = self.get_object()
-        answers = question.answers.order_by('-votes', '-created_at')
+        answers = question.answers.\
+            select_related('author').\
+            select_related('author__profile').\
+            order_by('-total_votes', '-created_at')
 
         paginator = Paginator(answers, 5)
         page = self.request.GET.get('page')
@@ -102,7 +120,8 @@ class QuestionView(DetailView):
             answer.save()
             question.notify_author(request)
             return redirect(reverse('qa:question', kwargs={
-                "slug": question.slug
+                "slug": question.slug,
+                "pk": question.pk
             }))
         else:
             # TODO: Add 'form' to context for display errors
@@ -117,7 +136,7 @@ class JsonVote(LoginRequiredMixin, BaseDetailView):
         obj = self.get_object()
         obj.vote(request.user, value)
         return JsonResponse({
-            "votes": obj.votes
+            "votes": obj.total_votes
         })
 
 
