@@ -1,176 +1,195 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-
-# log_format ui_short '$remote_addr $remote_user $http_x_real_ip [$time_local] "$request" '
-#                     '$status $body_bytes_sent "$http_referer" '
-#                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
-#                     '$request_time';
-
+import argparse
+import pathlib
+import json
+import logging
+import datetime
+import re
 import gzip
 import collections
-import functools
-import re
-import json
+import statistics
+import string
 import os
-import argparse
-import math
+from typing import NamedTuple, Union, Optional, List, Dict, Any, cast
 
-
-config = {
+default_config = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
-    "LOG_DIR": "./log"
+    "LOG_DIR": "./log",
+    "LOG_FILE": None,
+    "ERRORS_TRESHOLD": 0.01,
+    "TS_FILE": "./log_analyzer.ts",
 }
 
+log_pattern = re.compile(
+    r"(?P<remote_addr>[\d\.]+)\s"
+    r"(?P<remote_user>\S*)\s+"
+    r"(?P<http_x_real_ip>\S*)\s"
+    r"\[(?P<time_local>.*?)\]\s"
+    r'"(?P<request>.*?)"\s'
+    r"(?P<status>\d+)\s"
+    r"(?P<body_bytes_sent>\S*)\s"
+    r'"(?P<http_referer>.*?)"\s'
+    r'"(?P<http_user_agent>.*?)"\s'
+    r'"(?P<http_x_forwarded_for>.*?)"\s'
+    r'"(?P<http_X_REQUEST_ID>.*?)"\s'
+    r'"(?P<http_X_RB_USER>.*?)"\s'
+    r"(?P<request_time>\d+\.\d+)\s*"
+)
 
-def xreadlines(log_path):
-    if log_path.endswith(".gz"):
-        log = gzip.open(log_path, 'rb')
-    else:
-        log = open(log_path)
-    for line in log:
-        yield line
-    log.close()
+Config  = Dict[str, Any]
+Log = NamedTuple('Log', [('path', pathlib.Path), ('date', datetime.date), ('ext', str)])
+Request = NamedTuple('Request', [('url', str), ('request_time', float)])
 
+def update_ts(ts_file: pathlib.Path) -> None:
+    now = datetime.datetime.now()
+    timestamp = int(now.timestamp())
+    ts_file.write_text(str(timestamp))
+    os.utime(ts_file.absolute(), times=(timestamp, timestamp))
 
-def field_map(dictseq, name, func):
-    for d in dictseq:
-        try:
-            d[name] = func(d[name])
-            yield d
-        except:
-            pass
+def create_report(template_path: pathlib.Path, destination_path: pathlib.Path, log_statistics: List[Dict[str, Union[str, float]]]) -> None:
+    with template_path.open() as f:
+        template = string.Template(f.read())
+    report = template.safe_substitute(table_json=json.dumps(log_statistics))
+    with destination_path.open(mode='w') as f:
+        f.write(report)
 
-
-def save2html(stat, template, report_path):
-    with open(template) as f:
-        text = f.read()
-    text = text.replace('$table_json', json.dumps(stat))
-
-    with open(report_path, "w") as f:
-        f.write(text)
-
-
-def save2json(stat, json_path):
-    with open(json_path, "w") as f:
-        f.write(json.dumps(stat))
-
-
-def percentile(nums, p):
-    if not nums:
+def process_line(line: str) -> Optional[Request]:
+    m = log_pattern.match(line)
+    if not m:
         return None
-    k = (len(nums) - 1) * p
-    f = math.floor(k)
-    c = math.ceil(k)
-    if f == c:
-        return nums[int(k)]
-    d0 = nums[int(f)] * (c - k)
-    d1 = nums[int(c)] * (k - f)
-    return d0 + d1
+    
+    log_line = m.groupdict()
+    try:
+        method, url, protocol = log_line['request'].split()
+        request_time = float(log_line['request_time'])
+    except (ValueError, TypeError):
+        return None
+    else:
+        return Request(url, request_time)
 
+def process_log(log: Log, errors_treshold: float) -> List[Dict[str, Union[str, float]]]:
+    if log.ext == '.gz':
+        f = gzip.open(log.path.absolute(), mode='rt')
+    else:
+        f = log.path.open()
+    
+    n_loglines = 0
+    n_fails = 0
+    url2times: Dict[str, List[float]] = collections.defaultdict(list)
+    with f:
+        for line in f:
+            n_loglines += 1
+            request = process_line(line)
+            if not request:
+                n_fails += 1
+                continue
+            url2times[request.url].append(request.request_time)
 
-def process_log(log):
-    url2times = collections.defaultdict(list)
-    for logline in log:
-        url2times[logline['request']].append(logline['request_time'])
+    errors = n_fails / n_loglines
+    if errors > errors_treshold:
+        raise Exception(f"Доля ошибок {errors} превышает {errors_treshold}")
 
-    total_count = total_time = 0
-    for v in url2times.itervalues():
-        total_count += len(v)
-        total_time += sum(v)
-
+    total_count = 0
+    total_time = 0.
+    for request_times in url2times.values():
+        total_count += len(request_times)
+        total_time  += sum(request_times)
+    
     stat = []
-    for url, times_list in url2times.iteritems():
-        times_list.sort()
+    for url, request_times in url2times.items():
         stat.append({
             'url': url,
-            'count': len(times_list),
-            'count_perc': round(100 * len(times_list) / float(total_count), 3),
-            'time_avg': round(sum(times_list) / len(times_list), 3),
-            'time_max': round(max(times_list), 3),
-            'time_sum': round(sum(times_list), 3),
-            'time_perc': round(100 * sum(times_list) / total_time, 3),
-            'time_p50': round(percentile(times_list, 0.5), 3),
-            'time_p95': round(percentile(times_list, 0.95), 3),
-            'time_p99': round(percentile(times_list, 0.99), 3),
+            'count': len(request_times),
+            'count_perc': round(100. * len(request_times) / float(total_count), 3),
+            'time_sum': round(sum(request_times), 3),
+            'time_perc': round(100. * sum(request_times) / total_time, 3),
+            'time_avg': round(statistics.mean(request_times), 3),
+            'time_max': round(max(request_times), 3),
+            "time_med": round(statistics.median(request_times), 3),
         })
-    return stat
+    
+    return stat # type: ignore
 
+def get_report_path(report_dir: pathlib.Path, log: Log) -> pathlib.Path:
+    if not report_dir.exists() or not report_dir.is_dir():
+        raise FileNotFoundError("Неверно указан путь к директории с отчетами")
+    
+    report_filename = f'report-{log.date:%Y.%m.%d}.html'
+    report_path = report_dir / report_filename
+    return report_path
 
-def log_parser(log_path):
-    logpat = re.compile(
-        r"(?P<remote_addr>[\d\.]+)\s"
-        r"(?P<remote_user>\S*)\s+"
-        r"(?P<http_x_real_ip>\S*)\s"
-        r"\[(?P<time_local>.*?)\]\s"
-        r'"(?P<request>.*?)"\s'
-        r"(?P<status>\d+)\s"
-        r"(?P<body_bytes_sent>\S*)\s"
-        r'"(?P<http_referer>.*?)"\s'
-        r'"(?P<http_user_agent>.*?)"\s'
-        r'"(?P<http_x_forwarded_for>.*?)"\s'
-        r'"(?P<http_X_REQUEST_ID>.*?)"\s'
-        r'"(?P<http_X_RB_USER>.*?)"\s'
-        r"(?P<request_time>\d+\.\d+)\s*"
-    )
-    log_lines = xreadlines(log_path)
-    log = (logpat.match(line).groupdict() for line in log_lines)
-    log = field_map(log, 'request', lambda request: request.split(' ')[1]) # TODO: Fix '0' request
-    log = field_map(log, 'request_time', float)
-    return log
+def get_last_logfile(log_dir: pathlib.Path) -> Optional[Log]:
+    if not log_dir.exists() or not log_dir.is_dir():
+        raise FileNotFoundError("Неверно указан путь к директории с журналами")
+    
+    logfile = None
+    pattern = re.compile(r"^nginx-access-ui\.log-(\d{8})(\.gz)?$")
+    for path in log_dir.iterdir():
+        try:
+            [(date, ext)] = re.findall(pattern, str(path))
+            log_date = datetime.datetime.strptime(date, "%Y%m%d").date()
+            if not logfile or logfile.date > log_date:
+                logfile = Log(path, log_date, ext)
+        except ValueError:
+            pass
+    
+    return logfile
 
+def setup_logging(logfile: Optional[str]) -> None:
+    logging.basicConfig( # type: ignore
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname).1s %(message)s",
+        datefmt="%Y.%m.%d %H:%M:%S",
+        filename=logfile)
 
-def main(log_path, fmt):
-    """
-    Папки из конфига уже должны быть созданы.
-    Подразумевается, что формат логов такой logname-DATE[.gz]
+def get_config(path: str, default_config: Config) -> Config:
+    if not path:
+        return default_config
+    
+    p = pathlib.Path(path)
+    if not p.exists() or not p.is_file():
+        raise FileNotFoundError("Неверно указан путь к конфигурационному файлу")
+    
+    with p.open() as f:
+        config = json.load(f)
+    
+    return {**default_config, **config}
 
-    Варианты запуска:
-    $ ./log_analyzer.py
-    $ ./log_analyzer.py --log_path path/to/log
-    $ ./log_analyzer.py -f json
-    $ ./log_analyzer.py --log_path path/to/log --format json
-    """
-
-    # Находим последний лог-файл по дате в имени файла
-    if not log_path:
-        logs = [os.path.join(config["LOG_DIR"], logfile) for logfile in os.listdir(config['LOG_DIR'])]
-        log_path = max(logs, key=lambda logfile: re.findall('(\d{8})', logfile)[0])
-
-    # Извлекаем дату из имени файла
-    log_date = re.findall('(\d{8})', log_path)[0]
-    log_date = log_date[:4] + "." + log_date[4:6] + "." + log_date[6:]
-
-    # Проверяем существует ли уже отчет в соответствующем формате
-    output_path = os.path.join(config["REPORT_DIR"], "report-%s.%s" % (log_date, fmt))
-    if os.path.exists(output_path):
-        print "Report already exists", output_path
-        return
-
-    log = log_parser(log_path)
-    stat = process_log(log)
-
-    if fmt == "json":
-        save2json(stat, output_path)
-    else:
-        tmpl_path = os.path.join(config["REPORT_DIR"], "report.html")
-        save2html(stat, tmpl_path, output_path)
-
-
-def parse_args():
-    parser = argparse.ArgumentParser("Process log files")
-    parser.add_argument("--log_path",
-        dest="log_path",
-        default=None,
-        help="Path to the log file")
-    parser.add_argument("-f", "--format",
-        dest="fmt",
-        default="html",
-        help="Output format")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser("Обработка лог-файлов и генерирование отчета")
+    parser.add_argument("--config",
+        dest="config_path",
+        help="Путь к конфигурационному файлу")
     return parser.parse_args()
 
+def main(config: Config) -> None:
+    log_dir = pathlib.Path(cast(str, config.get("LOG_DIR")))
+    last_log = get_last_logfile(log_dir)
+    if not last_log:
+        logging.info(f"Нет логов в '{log_dir}' для обработки")
+        return
+
+    report_dir = pathlib.Path(cast(str, config.get("REPORT_DIR")))
+    report_path = get_report_path(report_dir, last_log)
+    if report_path.exists():
+        logging.info(f"Отчет для '{last_log.path}' уже существует")
+        return
+        
+    log_statistics = process_log(last_log, cast(float, config.get("ERRORS_TRESHOLD")))
+    log_statistics = sorted(log_statistics, key=lambda r: r['time_sum'], reverse=True)
+    log_statistics = log_statistics[:config.get("REPORT_SIZE")]
+    report_template_path = report_dir / "report.html"
+    create_report(report_template_path, report_path, log_statistics)
+    
+    ts_path = pathlib.Path(cast(str, config.get('TS_FILE')))
+    update_ts(ts_path)
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.log_path, args.fmt)
+    config = get_config(args.config_path, default_config)
+    setup_logging(config.get('LOG_FILE'))
+
+    try:
+        main(config)
+    except Exception as e:
+        logging.exception(str(e))
