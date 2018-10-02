@@ -2,7 +2,7 @@ import hashlib
 import datetime
 import functools
 import unittest
-
+import store
 import api
 
 
@@ -21,16 +21,17 @@ class TestSuite(unittest.TestCase):
     def setUp(self):
         self.context = {}
         self.headers = {}
+        self.settings = store.Storage(store.RedisStorage())
 
     def get_response(self, request):
-        return api.method_handler({"body": request, "headers": self.headers}, self.context)
+        return api.method_handler({"body": request, "headers": self.headers}, self.context, self.settings)
 
     def set_valid_auth(self, request):
         if request.get("login") == api.ADMIN_LOGIN:
-            request["token"] = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + api.ADMIN_SALT).hexdigest()
+            request["token"] = hashlib.sha512(bytes(datetime.datetime.now().strftime("%Y%m%d%H") + api.ADMIN_SALT, "utf-8")).hexdigest()
         else:
             msg = request.get("account", "") + request.get("login", "") + api.SALT
-            request["token"] = hashlib.sha512(msg).hexdigest()
+            request["token"] = hashlib.sha512(bytes(msg, "utf-8")).hexdigest()
 
     def test_empty_request(self):
         _, code = self.get_response({})
@@ -132,9 +133,10 @@ class TestSuite(unittest.TestCase):
         response, code = self.get_response(request)
         self.assertEqual(api.OK, code, arguments)
         self.assertEqual(len(arguments["client_ids"]), len(response))
-        self.assertTrue(all(v and isinstance(v, list) and all(isinstance(i, basestring) for i in v)
+        self.assertTrue(all(v and isinstance(v, list) and all(isinstance(i, str) for i in v)
                         for v in response.values()))
         self.assertEqual(self.context.get("nclients"), len(arguments["client_ids"]))
+
 
 if __name__ == "__main__":
     unittest.main()
