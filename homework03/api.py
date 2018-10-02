@@ -1,86 +1,12 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# Нужно реализовать простое HTTP API сервиса скоринга. Шаблон уже есть в api.py, тесты в test.py.
-# API необычно тем, что польщователи дергают методы POST запросами. Чтобы получить результат
-# пользователь отправляет в POST запросе валидный JSON определенного формата на локейшн /method
-
-# Структура json-запроса:
-
-# {"account": "<имя компании партнера>", "login": "<имя пользователя>", "method": "<имя метода>",
-#  "token": "<аутентификационный токен>", "arguments": {<словарь с аргументами вызываемого метода>}}
-
-# account - строка, опционально, может быть пустым
-# login - строка, обязательно, может быть пустым
-# method - строка, обязательно, может быть пустым
-# token - строка, обязательно, может быть пустым
-# arguments - словарь (объект в терминах json), обязательно, может быть пустым
-
-# Валидация:
-# запрос валиден, если валидны все поля по отдельности
-
-# Структура ответа:
-# {"code": <числовой код>, "response": {<ответ вызываемого метода>}}
-# {"code": <числовой код>, "error": {<сообщение об ошибке>}}
-
-# Аутентификация:
-# смотри check_auth в шаблоне. В случае если не пройдена, нужно возвращать
-# {"code": 403, "error": "Forbidden"}
-
-# Метод online_score.
-# Аргументы:
-# phone - строка или число, длиной 11, начинается с 7, опционально, может быть пустым
-# email - строка, в которой есть @, опционально, может быть пустым
-# first_name - строка, опционально, может быть пустым
-# last_name - строка, опционально, может быть пустым
-# birthday - дата в формате DD.MM.YYYY, с которой прошло не больше 70 лет, опционально, может быть пустым
-# gender - число 0, 1 или 2, опционально, может быть пустым
-
-# Валидация аругементов:
-# аргументы валидны, если валидны все поля по отдельности и если присутсвует хоть одна пара
-# phone-email, first name-last name, gender-birthday с непустыми значениями.
-
-# Ответ:
-# в ответ выдается произвольное число, которое больше или равно 0
-# {"score": <число>}
-# или если запрос пришел от валидного пользователя admin
-# {"score": 42}
-# или если произошла ошибка валидации
-# {"code": 422, "error": "<сообщение о том какое поле невалидно>"}
-
-# $ curl -X POST  -H "Content-Type: application/json" -d '{"account": "horns&hoofs", "login": "h&f", "method": "online_score", "token": "55cc9ce545bcd144300fe9efc28e65d415b923ebb6be1e19d2750a2c03e80dd209a27954dca045e5bb12418e7d89b6d718a9e35af34e14e1d5bcd5a08f21fc95", "arguments": {"phone": "79175002040", "email": "stupnikov@otus.ru", "first_name": "Стансилав", "last_name": "Ступников", "birthday": "01.01.1990", "gender": 1}}' http://127.0.0.1:8080/method/
-# -> {"code": 200, "response": {"score": 5.0}}
-
-# Метод clients_interests.
-# Аргументы:
-# client_ids - массив числе, обязательно, не пустое
-# date - дата в формате DD.MM.YYYY, опционально, может быть пустым
-
-# Валидация аругементов:
-# аргументы валидны, если валидны все поля по отдельности.
-
-# Ответ:
-# в ответ выдается словарь <id клиента>:<список интересов>. Список генерировать произвольно.
-# {"client_id1": ["interest1", "interest2" ...], "client2": [...] ...}
-# или если произошла ошибка валидации
-# {"code": 422, "error": "<сообщение о том какое поле невалидно>"}
-
-# $ curl -X POST  -H "Content-Type: application/json" -d '{"account": "horns&hoofs", "login": "admin", "method": "clients_interests", "token": "d3573aff1555cd67dccf21b95fe8c4dc8732f33fd4e32461b7fe6a71d83c947688515e36774c00fb630b039fe2223c991f045f13f24091386050205c324687a0", "arguments": {"client_ids": [1,2,3,4], "date": "20.07.2017"}}' http://127.0.0.1:8080/method/
-# -> {"code": 200, "response": {"1": ["books", "hi-tech"], "2": ["pets", "tv"], "3": ["travel", "music"], "4": ["cinema", "geek"]}}
-
-# Требование: в результате в git должно быть только два(2!) файлика: api.py, test.py.
-# Deadline: следующее занятие
-
-import abc
 import json
-import random
 import datetime
 import logging
 import hashlib
 import uuid
 from optparse import OptionParser
-from six import string_types
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from scoring import get_score, get_interests
+import store
 
 
 SALT = "Otus"
@@ -109,131 +35,171 @@ GENDERS = {
 }
 
 
-class ValidationError(Exception):
-    """ An error while validating data """
-    pass
-
-
-class Field(object):
-    __metaclass__ = abc.ABCMeta
-    empty_values = (None, (), [], {}, '')
+class Field:
+    empty_values = (None, '', [], (), {})
 
     def __init__(self, required=False, nullable=False):
         self.required = required
         self.nullable = nullable
 
-    @abc.abstractmethod
     def validate(self, value):
+        if value is None and self.required:
+            raise ValueError("Это поле является обязательным")
+        if value in self.empty_values and not self.nullable:
+            raise ValueError("Это поле не может быть пустым")
+
+    def run_validator(self, value):
         pass
+
+    def to_python(self, value):
+        return value
+
+    def clean(self, value):
+        value = self.to_python(value)
+        self.validate(value)
+        if value in self.empty_values:
+            return value
+        self.run_validator(value)
+        return value
 
 
 class CharField(Field):
-    def validate(self, value):
-        if not isinstance(value, string_types):
-            raise ValidationError("This field must be a string")
+    
+    def to_python(self, value):
+        if value is not None and not isinstance(value, str):
+            raise TypeError("Это поле должно быть строкой")
+        return value
 
 
 class ArgumentsField(Field):
-    def validate(self, value):
-        if not isinstance(value, dict):
-            raise ValidationError("This field must be a dict")
+
+    def to_python(self, value):
+        if value is not None and not isinstance(value, dict):
+            raise TypeError("Это поле должно быть словарем")
+        return value
 
 
 class EmailField(CharField):
-    def validate(self, value):
-        super(EmailField, self).validate(value)
+    
+    def run_validator(self, value):
+        super().run_validator(value)
         if "@" not in value:
-            raise ValidationError("Invalid email address")
+            raise ValueError("Неверно указан адрес электронной почты")
 
 
 class PhoneField(Field):
-    def validate(self, value):
-        if not isinstance(value, string_types) and not isinstance(value, int):
-            raise ValidationError("Phone number must be numeric or string value")
-        if not str(value).startswith("7"):
-            raise ValidationError("Incorrect phone number format, should be 7XXXXXXXXX")
 
-
-class DateField(Field):
-    def validate(self, value):
+    def to_python(self, value):
+        if value is None:
+            return value
+        if not isinstance(value, (str, int)):
+            raise TypeError("Это поле должно быть задано числом или строкой")
+        return str(value)
+    
+    def run_validator(self, value):
         try:
-            datetime.datetime.strptime(value, '%d.%m.%Y')
+            int(value)
         except ValueError:
-            raise ValidationError("Incorrect data format, should be DD.MM.YYYY")
+            raise ValueError("Это поле должно содержать только цифры")
+        
+        if not value.startswith("7") or len(value) != 11:
+            raise ValueError("Неверно указан номер телефона")
+
+
+class DateField(CharField):
+
+    def to_python(self, value):
+        value = super().to_python(value)
+        if value in self.empty_values:
+            return value
+        try:
+            return self.strptime(value, "%d.%m.%Y")
+        except ValueError:
+            raise ValueError("Дата должна иметь формат DD.MM.YYYY")
+    
+    def strptime(self, value, format):
+        return datetime.datetime.strptime(value, format).date()
 
 
 class BirthDayField(DateField):
-    def validate(self, value):
-        super(BirthDayField, self).validate(value)
-        bdate = datetime.datetime.strptime(value, '%d.%m.%Y')
-        if datetime.datetime.now().year - bdate.year > 70:
-            raise ValidationError("Incorrect birth day")
+    
+    def run_validator(self, value):
+        super().run_validator(value)
+        today = datetime.date.today()
+        delta = today - value
+        if delta.days / 365.25  > 70:
+            raise ValueError("С даты рождения должно пройти не более 70 лет")
 
 
 class GenderField(Field):
-    def validate(self, value):
+
+    def to_python(self, value):
+        if value is not None and not isinstance(value, int):
+            raise TypeError("Это поле должно быть целым положительным числом")
+        return value
+    
+    def run_validator(self, value):
         if value not in GENDERS:
-            raise ValidationError("Gender must be equal to 0,1 or 2")
+            raise ValueError("Пол должен быть задан значениями 0,1 или 2")
 
 
 class ClientIDsField(Field):
-    def validate(self, values):
-        if not isinstance(values, list):
-            raise ValidationError("Invalid data type, must be an array")
-        if not all(isinstance(v, int) and v >= 0 for v in values):
-            raise ValidationError("All elements must be positive integers")
+
+    def to_python(self, value):
+        if value is not None:
+            if not isinstance(value, list) or not all(isinstance(v, int) for v in value):
+                raise TypeError("Это поле должно содержать спискок целых чисел")
+        return value
+    
+    def run_validator(self, value):
+         if not all(v >=0 for v in value):
+             raise ValueError("Это поле должно состоять из положительных целых чисел")
 
 
-class DeclarativeFieldsMetaclass(type):
-    def __new__(meta, name, bases, attrs):
-        new_class = super(DeclarativeFieldsMetaclass, meta).__new__(meta, name, bases, attrs)
-        fields = []
-        for field_name, field in attrs.items():
-            if isinstance(field, Field):
-                field._name = field_name
-                fields.append((field_name, field))
-        new_class.fields = fields
-        return new_class
+class RequestMeta(type):
+
+    def __new__(cls, name, bases, namespace):
+        fields = {
+            filed_name: field
+            for filed_name, field in namespace.items()
+            if isinstance(field, Field)
+        }
+
+        new_namespace = namespace.copy()
+        for filed_name in fields:
+            del new_namespace[filed_name]
+        new_namespace["_fields"] = fields
+        return super().__new__(cls, name, bases, new_namespace)
 
 
-class Request(object):
-    __metaclass__ = DeclarativeFieldsMetaclass
+class Request(metaclass=RequestMeta):
 
-    def __init__(self, **kwargs):
-        self._errors = {}
-        self.base_fields = []
-        for field_name, value in kwargs.items():
-            setattr(self, field_name, value)
-            self.base_fields.append(field_name)
-
-    def validate(self):
-        for name, field in self.fields:
-            if name not in self.base_fields:
-                if field.required:
-                    self._errors[name] = "This field is required"
-                continue
-
-            value = getattr(self, name)
-            if value in field.empty_values and not field.nullable:
-                self._errors[name] = "This field can't be blank"
-
-            try:
-                field.validate(value)
-            except ValidationError as e:
-                self._errors[name] = e.message
-
+    def __init__(self, data=None):
+        self._errors = None
+        self.data = {} if not data else data
+        self.non_empty_fields = []
+    
     @property
     def errors(self):
+        if self._errors is None:
+            self.validate()
         return self._errors
-
+    
     def is_valid(self):
         return not self.errors
+    
+    def validate(self):
+        self._errors = {}
 
-    def __repr__(self):
-        return '%s(%s)' % (
-            self.__class__.__name__,
-            ','.join(['%s="%s"'%(name, repr(getattr(self, name))) for name, _ in self.fields])
-        )
+        for name, field in self._fields.items():
+            try:
+                value = self.data.get(name)
+                value = field.clean(value)
+                setattr(self, name, value)
+                if value not in field.empty_values:
+                    self.non_empty_fields.append(name)
+            except (TypeError, ValueError) as e:
+                self._errors[name] = str(e)
 
 
 class ClientsInterestsRequest(Request):
@@ -250,15 +216,12 @@ class OnlineScoreRequest(Request):
     gender = GenderField(required=False, nullable=True)
 
     def validate(self):
-        super(OnlineScoreRequest, self).validate()
+        super().validate()
         if not self._errors:
-            field_sets = [
-                ("phone", "email"),
-                ("first_name", "last_name"),
-                ("gender", "birthday")
-            ]
-            if not any(all(name in self.base_fields for name in fields) for fields in field_sets):
-                self._errors["arguments"] = "Invalid arguments list"
+            if self.phone and self.email: return
+            if self.first_name and self.last_name: return
+            if self.gender is not None and self.birthday: return
+            self._errors["arguments"] = "Неверный список аргументов"
 
 
 class MethodRequest(Request):
@@ -266,80 +229,71 @@ class MethodRequest(Request):
     login = CharField(required=True, nullable=True)
     token = CharField(required=True, nullable=True)
     arguments = ArgumentsField(required=True, nullable=True)
-    method = CharField(required=True, nullable=True)
+    method = CharField(required=True, nullable=False)
 
     @property
     def is_admin(self):
         return self.login == ADMIN_LOGIN
 
 
+class OnlineScoreHandler:
+
+    def process_request(self, request, context, store):
+        r = OnlineScoreRequest(request.arguments)
+        if not r.is_valid():
+            return r.errors, INVALID_REQUEST
+        
+        if request.is_admin:
+            score = 42
+        else:
+            score = get_score(store, r.phone, r.email, r.birthday, r.gender, r.first_name, r.last_name)
+        context["has"] = r.non_empty_fields
+        return {"score": score}, OK
+
+
+class ClientsInterestsHandler:
+
+    def process_request(self, request, context, store):
+        r = ClientsInterestsRequest(request.arguments)
+        if not r.is_valid():
+            return r.errors, INVALID_REQUEST
+        
+        context["nclients"] = len(r.client_ids)
+        response_body = {cid: get_interests(store, cid) for cid in r.client_ids}
+        return response_body, OK
+
+
 def check_auth(request):
-    if request.login == ADMIN_LOGIN:
-        digest = hashlib.sha512(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT).hexdigest()
+    if request.is_admin:
+        digest = hashlib.sha512(bytes(datetime.datetime.now().strftime("%Y%m%d%H") + ADMIN_SALT, "utf-8")).hexdigest()
     else:
-        digest = hashlib.sha512(request.account + request.login + SALT).hexdigest()
+        digest = hashlib.sha512(bytes(request.account + request.login + SALT, "utf-8")).hexdigest()
     if digest == request.token:
         return True
     return False
 
 
-class ClientsInterestsHandler(object):
-    choices = ["books", "tv", "music", "it", "travel", "pets"]
-
-    def process_request(self, request, context):
-        r = ClientsInterestsRequest(**request.arguments)
-        r.validate()
-        if not r.is_valid():
-            return r.errors, INVALID_REQUEST
-
-        resp_body = {cid: random.sample(self.choices, 2) for cid in r.client_ids}
-        context["nclients"] = len(r.client_ids)
-        return resp_body, OK
-
-
-class OnlineScoreHandler(object):
-
-    def process_request(self, request, context):
-        r = OnlineScoreRequest(**request.arguments)
-        r.validate()
-        if not r.is_valid():
-            return r.errors, INVALID_REQUEST
-
-        context["has"] = r.base_fields
-        score = 42 if request.is_admin else random.randint(0,100)
-        return {"score": score}, OK
-
-
-def method_handler(request, ctx):
+def method_handler(request, ctx, store):
     handlers = {
-        "clients_interests": ClientsInterestsHandler,
         "online_score": OnlineScoreHandler,
+        "clients_interests": ClientsInterestsHandler
     }
 
-    try:
-        method_request = MethodRequest(**request["body"])
-    except KeyError:
-        return "The request must contain the argument body", INVALID_REQUEST
-    except TypeError:
-        return "Invalid request format", INVALID_REQUEST
-    except Exception:
-        return "Unexpected error", INVALID_REQUEST
-
-    method_request.validate()
-
+    method_request = MethodRequest(request["body"])
     if not method_request.is_valid():
         return method_request.errors, INVALID_REQUEST
     if not check_auth(method_request):
         return "Forbidden", FORBIDDEN
-
+    
     handler = handlers[method_request.method]()
-    return handler.process_request(method_request, ctx)
+    return handler.process_request(method_request, ctx, store)
 
 
 class MainHTTPHandler(BaseHTTPRequestHandler):
     router = {
         "method": method_handler
     }
+    store = store.Storage(store.RedisStorage())
 
     def get_request_id(self, headers):
         return headers.get('HTTP_X_REQUEST_ID', uuid.uuid4().hex)
@@ -350,6 +304,7 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
         request = None
         try:
             data_string = self.rfile.read(int(self.headers['Content-Length']))
+            data_string = data_string.decode("utf-8")
             request = json.loads(data_string)
         except:
             code = BAD_REQUEST
@@ -359,8 +314,8 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             logging.info("%s: %s %s" % (self.path, data_string, context["request_id"]))
             if path in self.router:
                 try:
-                    response, code = self.router[path]({"body": request, "headers": self.headers}, context)
-                except Exception, e:
+                    response, code = self.router[path]({"body": request, "headers": self.headers}, context, self.store)
+                except Exception as e:
                     logging.exception("Unexpected error: %s" % e)
                     code = INTERNAL_ERROR
             else:
@@ -375,8 +330,9 @@ class MainHTTPHandler(BaseHTTPRequestHandler):
             r = {"error": response or ERRORS.get(code, "Unknown Error"), "code": code}
         context.update(r)
         logging.info(context)
-        self.wfile.write(json.dumps(r))
+        self.wfile.write(bytes(json.dumps(r), "utf-8"))
         return
+
 
 if __name__ == "__main__":
     op = OptionParser()
